@@ -1,0 +1,10 @@
+[package]
+name = "ray"
+version = "0.1.0"
+edition = "2024"
+
+author = "Mikołaj Kozłowski <kozlowski.g.mikolaj@gmail.com>"
+license-file = "LICENSE"
+repository = "https://github.com/Fasamii/ray"
+
+[dependencies]
