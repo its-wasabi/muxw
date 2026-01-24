@@ -4,16 +4,34 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.93.0"
 
-authors = [ "Mikołaj Kozłowski <kozlowski.g.mikolaj@gmail.com>" ]
+authors = ["Mikołaj Kozłowski <kozlowski.g.mikolaj@gmail.com>"]
 license-file = "LICENSE"
 repository = "https://github.com/Fasamii/ray"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+debug = false
+incremental = false
+overflow-checks = false
+
+[profile.release-debug]
+inherits = "release"
+debug = 1
+strip = "none"
 
 [dependencies]
 clap = { version = "4.5.54", features = ["derive"] }
 clap_complete = "4.5.65"
 bitflags = "2.10.0"
 
-mlua = { version = "0.11.5", default-features = false, features = ["luajit52", "vendored"] }
+mlua = { version = "0.11.5", default-features = false, features = [
+	"luajit52",
+	"vendored",
+] }
 
 epoll = { git = "https://github.com/Fasamii/epoll.git" }
 udev = "0.9.3"
@@ -23,6 +41,6 @@ xkbcommon = "0.9.0"
 ash = "0.38.0"
 gbm = "0.18.0"
 drm = "0.14.1"
-wayland-server = "0.31.10"
+wayland-server = { version = "0.31.10", default-features = false }
 wayland-backend = "0.3.11"
 wayland-protocols = "0.32.9"
