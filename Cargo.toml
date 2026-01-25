@@ -7,6 +7,7 @@ rust-version = "1.93.0"
 authors = ["Mikołaj Kozłowski <kozlowski.g.mikolaj@gmail.com>"]
 license-file = "LICENSE"
 repository = "https://github.com/Fasamii/ray"
+description = "Ray wayland compositor"
 
 [profile.release]
 opt-level = 3
