@@ -1,9 +1,15 @@
 #[derive(Debug, clap::Parser)]
+#[command(name = crate::NAME)]
 #[command(author, version, about, long_about = None)]
+#[command(args_conflicts_with_subcommands = false)]
+#[command(subcommand_value_name = "SUBCOMMAND")]
+#[command(subcommand_help_heading = "Subcommands")]
+#[command(after_help = "Use \"ray [SUBCOMMAND] --help\" for more information on a subcommand")]
 pub struct Cli {
-    /// Set config directory/file path
-    #[arg(short, long, value_name = "PATH", global = true)]
+    /// Set config file or directory path
+    #[arg(short, long, value_name = "PATH")]
     pub config: Option<std::path::PathBuf>,
+
     #[command(subcommand)]
     pub subcommand: Option<CliSub>,
 }
@@ -16,14 +22,19 @@ pub enum CliSub {
         query: CliSubQuery,
     },
 
-    /// Validate config correctness
-    Validate,
+    /// Validate configuration file
+    Validate {
+        /// Path to config file or directory
+        #[arg(short, long, value_name = "PATH")]
+        config: Option<std::path::PathBuf>,
+    },
 
-    // Generate and apply completion for selected shell
+    /// Generate and apply completions
     MakeCompletion {
+        /// Target shell
         #[arg(long)]
         shell: Option<clap_complete::Shell>,
-        // Output completion to stdout instead of apply
+        /// Print to stdout instead of installing
         #[arg(long)]
         stdout: bool,
     },
@@ -31,11 +42,11 @@ pub enum CliSub {
 
 #[derive(Debug, clap::Subcommand)]
 pub enum CliSubQuery {
-    /// List output devices
+    /// List available output devices
     Outputs,
-    /// List input devices
-    Input,
-    /// List opened windows
+    /// List available input devices
+    Inputs,
+    /// List currently opened windows
     Windows,
 }
 
@@ -43,7 +54,7 @@ impl Cli {
     pub fn handle(&self) {
         match &self.subcommand {
             Some(CliSub::Query { query }) => Self::handle_query(query),
-            Some(CliSub::Validate) => Self::handle_validate(&self.config),
+            Some(CliSub::Validate { config }) => Self::handle_validate(config),
             Some(CliSub::MakeCompletion { shell, stdout }) => {
                 Self::handle_make_completion(shell, stdout)
             }
@@ -55,7 +66,7 @@ impl Cli {
     fn handle_query(query: &CliSubQuery) {
         match query {
             CliSubQuery::Outputs => todo!("Outputs"),
-            CliSubQuery::Input => todo!("Inputs"),
+            CliSubQuery::Inputs => todo!("Inputs"),
             CliSubQuery::Windows => todo!("Windows"),
         }
     }

@@ -1,7 +1,7 @@
 #![allow(unused)]
-// TODO: Remove later
 macro_rules! here {
     ($($arg:tt)*) => {
+        #[cfg(debug_assertions)]
         eprintln!(
         "\x1b[38;5;3m[{}:{}]\x1b[0m {}",
         file!(),
