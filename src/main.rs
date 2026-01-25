@@ -1,5 +1,13 @@
 #![allow(unused)]
 macro_rules! here {
+    () => {
+        #[cfg(debug_assertions)]
+        eprintln!(
+            "\x1b[38;5;3m[{}:\x1b[38;5;1m{}\x1b[38;5;3m]\x1b[0m",
+            file!(),
+            line!()
+        )
+    };
     ($($arg:tt)*) => {
         #[cfg(debug_assertions)]
         eprintln!(
@@ -7,8 +15,7 @@ macro_rules! here {
         file!(),
         line!(),
         format_args!($($arg)*)
-        );
-
+        )
     };
 }
 
@@ -59,6 +66,7 @@ fn main() {
         cli.handle(); // 4. Handle cli (internally requires PATH)
     }
 
+    here!();
     here!(
         "[{}:{}] Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}",
         file!(),
@@ -68,4 +76,3 @@ fn main() {
     let mut ray = compositor::Ray::new();
     ray.run();
 }
-
