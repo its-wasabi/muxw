@@ -71,7 +71,7 @@ impl Cli {
         use clap::CommandFactory;
         let mut cmd = Cli::command();
 
-        let shell = shell.unwrap_or(get_shell().expect("Specify shell with --shell"));
+        let shell = shell.unwrap_or(get_shell().unwrap_or_else(|| todo!("Shell not supported")));
 
         if *stdout {
             clap_complete::generate(shell, &mut cmd, crate::NAME, &mut std::io::stdout());
@@ -119,8 +119,12 @@ fn get_shell_completion_file(shell: clap_complete::Shell) -> std::fs::File {
     match std::fs::File::create(file_path) {
         Ok(file) => file,
         Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
-            panic!("You may want to run that with sudo")
+            eprintln!("You may want to run that with sudo");
+            std::process::exit(1);
         }
-        Err(err) => panic!("Failed to create completion file"),
+        Err(err) => {
+            eprintln!("Failed to create completion file");
+            std::process::exit(1);
+        }
     }
 }
