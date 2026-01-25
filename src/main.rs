@@ -57,21 +57,25 @@ mod compositor;
 mod path;
 
 fn main() {
-    // TODO: Remove comments bellow
-    let cli = cli::Cli::parse(); // 1. Parse cli
-    let path = path::Path::new(&cli); // 2. Parse path
-    CLI.set(cli).expect("Failed to set cli"); // 3. Set global CLI
-    PATH.set(path).expect("Failed to set path"); // 4. Set global PATH
+    let cli = cli::Cli::parse();
+    let path = match path::Path::new(&cli) {
+        Ok(path) => path,
+        Err(err) => {
+            eprintln!("\x1b[38;5;1mERROR:\x1b[0m {err}");
+            std::process::exit(1);
+        }
+    };
+    CLI.set(cli);
+    PATH.set(path);
+    #[allow(clippy::collapsible_if)]
     if let Some(cli) = CLI.get() {
-        cli.handle(); // 4. Handle cli (internally requires PATH)
+        if let Err(err) = cli.handle() {
+            eprintln!("\x1b[38;5;1mERROR:\x1b[0m {err}");
+            std::process::exit(1);
+        }
     }
 
-    here!();
-    here!(
-        "[{}:{}] Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}",
-        file!(),
-        line!()
-    );
+    here!("Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}",);
 
     let mut ray = compositor::Ray::new();
     ray.run();

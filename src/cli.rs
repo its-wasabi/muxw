@@ -1,3 +1,5 @@
+use std::io;
+
 #[derive(Debug, clap::Parser)]
 #[command(name = crate::NAME)]
 #[command(author, version, about, long_about = None)]
@@ -50,20 +52,44 @@ pub enum CliSubQuery {
     Windows,
 }
 
-impl Cli {
-    pub fn handle(&self) {
-        match &self.subcommand {
-            Some(CliSub::Query { query }) => Self::handle_query(query),
-            Some(CliSub::Validate { config }) => Self::handle_validate(config),
-            Some(CliSub::MakeCompletion { shell, stdout }) => {
-                Self::handle_make_completion(shell, stdout)
+#[derive(Debug)]
+pub enum CliError {
+    ShellNotSupported,
+    ShellNotDetected,
+    FileCreation(std::io::Error),
+    PermissionDenied,
+}
+
+impl std::fmt::Display for CliError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CliError::ShellNotSupported => write!(f, "Shell not supported"),
+            CliError::ShellNotDetected => write!(f, "Could not detect shell"),
+            CliError::FileCreation(error) => write!(f, "Failed to create completion file: {error}"),
+            CliError::PermissionDenied => {
+                write!(f, "Permission denied. You may want to run this with sudo")
             }
-            None => return,
         }
-        std::process::exit(0);
+    }
+}
+
+impl std::error::Error for CliError {}
+
+impl Cli {
+    pub fn handle(&self) -> Result<(), CliError> {
+        match &self.subcommand {
+            Some(CliSub::Query { query }) => Self::handle_query(query)?,
+            Some(CliSub::Validate { config }) => Self::handle_validate(config)?,
+            Some(CliSub::MakeCompletion { shell, stdout }) => {
+                Self::handle_make_completion(shell, stdout)?
+            }
+            _ => return Ok(()),
+        };
+
+        std::process::exit(0)
     }
 
-    fn handle_query(query: &CliSubQuery) {
+    fn handle_query(query: &CliSubQuery) -> Result<(), CliError> {
         match query {
             CliSubQuery::Outputs => todo!("Outputs"),
             CliSubQuery::Inputs => todo!("Inputs"),
@@ -71,15 +97,18 @@ impl Cli {
         }
     }
 
-    fn handle_validate(config: &Option<std::path::PathBuf>) {
+    fn handle_validate(config: &Option<std::path::PathBuf>) -> Result<(), CliError> {
         todo!("First implement config logic - Validate config:{config:?}");
     }
 
-    fn handle_make_completion(shell: &Option<clap_complete::Shell>, stdout: &bool) {
+    fn handle_make_completion(
+        shell: &Option<clap_complete::Shell>,
+        stdout: &bool,
+    ) -> Result<(), CliError> {
         use clap::CommandFactory;
         let mut cmd = Cli::command();
 
-        let shell = shell.unwrap_or(get_shell().unwrap_or_else(|| todo!("Shell not supported")));
+        let shell = shell.unwrap_or(get_shell().ok_or(CliError::ShellNotSupported)?);
 
         if *stdout {
             clap_complete::generate(shell, &mut cmd, crate::NAME, &mut std::io::stdout());
@@ -88,9 +117,11 @@ impl Cli {
                 shell,
                 &mut cmd,
                 crate::NAME,
-                &mut get_shell_completion_file(shell),
+                &mut get_shell_completion_file(shell)?,
             );
-        }
+        };
+
+        Ok(())
     }
 }
 
@@ -98,10 +129,10 @@ fn get_shell() -> Option<clap_complete::Shell> {
     if let Ok(shell_path) = std::env::var("SHELL") {
         let shell_name = std::path::Path::new(&shell_path).file_name()?.to_str()?;
         match shell_name {
-            shell if shell.contains("bash") => Some(clap_complete::Shell::Bash),
-            shell if shell.contains("zsh") => Some(clap_complete::Shell::Zsh),
-            shell if shell.contains("fish") => Some(clap_complete::Shell::Fish),
-            shell if shell.contains("elvish") => Some(clap_complete::Shell::Elvish),
+            sh if sh.contains("bash") => Some(clap_complete::Shell::Bash),
+            sh if sh.contains("zsh") => Some(clap_complete::Shell::Zsh),
+            sh if sh.contains("fish") => Some(clap_complete::Shell::Fish),
+            sh if sh.contains("elvish") => Some(clap_complete::Shell::Elvish),
             _ => None,
         }
     } else {
@@ -109,7 +140,7 @@ fn get_shell() -> Option<clap_complete::Shell> {
     }
 }
 
-fn get_shell_completion_file(shell: clap_complete::Shell) -> std::fs::File {
+fn get_shell_completion_file(shell: clap_complete::Shell) -> Result<std::fs::File, CliError> {
     #[rustfmt::skip]
     let file_path = std::path::PathBuf::from(match shell {
         clap_complete::Shell::Bash => format!("/usr/share/bash-completion/completions/{}", crate::NAME),
@@ -121,18 +152,14 @@ fn get_shell_completion_file(shell: clap_complete::Shell) -> std::fs::File {
     });
 
     if let Some(dir_path) = file_path.parent() {
-        std::fs::create_dir_all(dir_path);
+        std::fs::create_dir_all(dir_path).map_err(CliError::FileCreation)?;
     };
 
-    match std::fs::File::create(file_path) {
-        Ok(file) => file,
-        Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
-            eprintln!("You may want to run that with sudo");
-            std::process::exit(1);
+    std::fs::File::create(file_path).map_err(|err| {
+        if err.kind() == io::ErrorKind::PermissionDenied {
+            CliError::PermissionDenied
+        } else {
+            CliError::FileCreation(err)
         }
-        Err(err) => {
-            eprintln!("Failed to create completion file");
-            std::process::exit(1);
-        }
-    }
+    })
 }
