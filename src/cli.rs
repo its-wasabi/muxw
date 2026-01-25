@@ -27,9 +27,6 @@ pub enum CliSub {
         #[arg(long)]
         stdout: bool,
     },
-
-    /// Exit from ray
-    Exit,
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -50,9 +47,9 @@ impl Cli {
             Some(CliSub::MakeCompletion { shell, stdout }) => {
                 Self::handle_make_completion(shell, stdout)
             }
-            Some(CliSub::Exit) => std::process::exit(0),
-            None => (),
+            None => return,
         }
+        std::process::exit(0);
     }
 
     fn handle_query(query: &CliSubQuery) {

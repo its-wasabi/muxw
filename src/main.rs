@@ -34,6 +34,7 @@ static CLI: std::sync::OnceLock<cli::Cli> = std::sync::OnceLock::new();
 static PATH: std::sync::OnceLock<path::Path> = std::sync::OnceLock::new();
 
 mod cli;
+mod compositor;
 mod path;
 
 fn main() {
@@ -42,8 +43,8 @@ fn main() {
     let path = path::Path::new(&cli);
     CLI.set(cli).expect("Failed to set cli arguments");
 
-    println!("CLI: {CLI:?}");
-    println!("NAME: {NAME:?}");
-    println!("NAME_C: {NAME_C:?}");
-    println!("VERSION: {VERSION:?}");
+    println!("Reached");
+
+    let mut ray = compositor::Ray::new();
+    ray.run();
 }
