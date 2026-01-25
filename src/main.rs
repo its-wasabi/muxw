@@ -1,4 +1,16 @@
 #![allow(unused)]
+// TODO: Remove later
+macro_rules! here {
+    ($($arg:tt)*) => {
+        eprintln!(
+        "\x1b[38;5;3m[{}:{}]\x1b[0m {}",
+        file!(),
+        line!(),
+        format_args!($($arg)*)
+        );
+
+    };
+}
 
 use clap::Parser;
 
@@ -38,13 +50,22 @@ mod compositor;
 mod path;
 
 fn main() {
-    let cli = cli::Cli::parse();
-    cli.handle();
-    let path = path::Path::new(&cli);
-    CLI.set(cli).expect("Failed to set cli arguments");
+    // TODO: Remove comments bellow
+    let cli = cli::Cli::parse(); // 1. Parse cli
+    let path = path::Path::new(&cli); // 2. Parse path
+    CLI.set(cli).expect("Failed to set cli"); // 3. Set global CLI
+    PATH.set(path).expect("Failed to set path"); // 4. Set global PATH
+    if let Some(cli) = CLI.get() {
+        cli.handle(); // 4. Handle cli (internally requires PATH)
+    }
 
-    println!("Reached");
+    here!(
+        "[{}:{}] Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}",
+        file!(),
+        line!()
+    );
 
     let mut ray = compositor::Ray::new();
     ray.run();
 }
+
