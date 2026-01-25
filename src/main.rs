@@ -31,12 +31,15 @@ const fn parse_version(version: &str) -> (u32, u32, u32) {
 const VERSION: (u32, u32, u32) = parse_version(env!("CARGO_PKG_VERSION"));
 
 static CLI: std::sync::OnceLock<cli::Cli> = std::sync::OnceLock::new();
+static PATH: std::sync::OnceLock<path::Path> = std::sync::OnceLock::new();
 
 mod cli;
+mod path;
 
 fn main() {
     let cli = cli::Cli::parse();
     cli.handle();
+    let path = path::Path::new(&cli);
     CLI.set(cli).expect("Failed to set cli arguments");
 
     println!("CLI: {CLI:?}");

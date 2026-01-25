@@ -68,6 +68,59 @@ impl Cli {
     }
 
     fn handle_make_completion(shell: &Option<clap_complete::Shell>, stdout: &bool) {
-        todo!("Implement make completion logic - Completion sehll:{shell:?} stdout:{stdout}");
+        use clap::CommandFactory;
+        let mut cmd = Cli::command();
+
+        let shell = shell.unwrap_or(get_shell().expect("Specify shell with --shell"));
+
+        if *stdout {
+            clap_complete::generate(shell, &mut cmd, crate::NAME, &mut std::io::stdout());
+        } else {
+            clap_complete::generate(
+                shell,
+                &mut cmd,
+                crate::NAME,
+                &mut get_shell_completion_file(shell),
+            );
+        }
+    }
+}
+
+fn get_shell() -> Option<clap_complete::Shell> {
+    if let Ok(shell_path) = std::env::var("SHELL") {
+        let shell_name = std::path::Path::new(&shell_path).file_name()?.to_str()?;
+        match shell_name {
+            shell if shell.contains("bash") => Some(clap_complete::Shell::Bash),
+            shell if shell.contains("zsh") => Some(clap_complete::Shell::Zsh),
+            shell if shell.contains("fish") => Some(clap_complete::Shell::Fish),
+            shell if shell.contains("elvish") => Some(clap_complete::Shell::Elvish),
+            _ => None,
+        }
+    } else {
+        todo!("Implement fallback behaviour");
+    }
+}
+
+fn get_shell_completion_file(shell: clap_complete::Shell) -> std::fs::File {
+    #[rustfmt::skip]
+    let file_path = std::path::PathBuf::from(match shell {
+        clap_complete::Shell::Bash => format!("/usr/share/bash-completion/completions/{}", crate::NAME),
+        clap_complete::Shell::Zsh => format!("/usr/share/zsh/site-functions/_{}", crate::NAME),
+        clap_complete::Shell::Fish => format!("/usr/share/fish/completions/{}.fish", crate::NAME),
+        clap_complete::Shell::Elvish => format!("/usr/share/elvish/lib/{}.elv", crate::NAME),
+        clap_complete::Shell::PowerShell => todo!("PowerShell not supported"),
+        _ => todo!("Handle that shell: {shell}"),
+    });
+
+    if let Some(dir_path) = file_path.parent() {
+        std::fs::create_dir_all(dir_path);
+    };
+
+    match std::fs::File::create(file_path) {
+        Ok(file) => file,
+        Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+            panic!("You may want to run that with sudo")
+        }
+        Err(err) => panic!("Failed to create completion file"),
     }
 }
