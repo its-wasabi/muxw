@@ -19,6 +19,13 @@ macro_rules! here {
     };
 }
 
+fn exit_on_error<T, E: std::fmt::Display>(result: Result<T, E>, code: i32) -> T {
+    result.unwrap_or_else(|err| {
+        eprintln!("\x1b[38;5;1mERROR:\x1b[0m {err}");
+        std::process::exit(code)
+    })
+}
+
 use clap::Parser;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
@@ -58,25 +65,16 @@ mod path;
 
 fn main() {
     let cli = cli::Cli::parse();
-    let path = match path::Path::new(&cli) {
-        Ok(path) => path,
-        Err(err) => {
-            eprintln!("\x1b[38;5;1mERROR:\x1b[0m {err}");
-            std::process::exit(1);
-        }
-    };
+    let path = exit_on_error(path::Path::new(&cli), 1);
     CLI.set(cli);
     PATH.set(path);
     #[allow(clippy::collapsible_if)]
     if let Some(cli) = CLI.get() {
-        if let Err(err) = cli.handle() {
-            eprintln!("\x1b[38;5;1mERROR:\x1b[0m {err}");
-            std::process::exit(1);
-        }
+        exit_on_error(cli.handle(), 1);
     }
 
     here!("Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}",);
 
-    let mut ray = compositor::Ray::new();
+    let mut ray = compositor::Compositor::new();
     ray.run();
 }

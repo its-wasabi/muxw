@@ -1,6 +1,6 @@
-pub struct Ray {}
+pub struct Compositor {}
 
-impl Ray {
+impl Compositor {
     pub fn new() -> Self {
         Self {}
     }

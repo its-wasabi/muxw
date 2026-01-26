@@ -22,6 +22,9 @@ pub enum CliSub {
     Query {
         #[command(subcommand)]
         query: CliSubQuery,
+        /// Output in json format
+        #[arg(short, long)]
+        json: bool,
     },
 
     /// Validate configuration file
@@ -50,6 +53,10 @@ pub enum CliSubQuery {
     Inputs,
     /// List currently opened windows
     Windows,
+    /// Get currently focused window
+    FocusedWindow,
+    /// Get currently focused workspace
+    FocusedWorkspace,
 }
 
 #[derive(Debug)]
@@ -78,7 +85,7 @@ impl std::error::Error for CliError {}
 impl Cli {
     pub fn handle(&self) -> Result<(), CliError> {
         match &self.subcommand {
-            Some(CliSub::Query { query }) => Self::handle_query(query)?,
+            Some(CliSub::Query { query, json }) => Self::handle_query(query, json)?,
             Some(CliSub::Validate { config }) => Self::handle_validate(config)?,
             Some(CliSub::MakeCompletion { shell, stdout }) => {
                 Self::handle_make_completion(shell, stdout)?
@@ -89,11 +96,13 @@ impl Cli {
         std::process::exit(0)
     }
 
-    fn handle_query(query: &CliSubQuery) -> Result<(), CliError> {
+    fn handle_query(query: &CliSubQuery, json: &bool) -> Result<(), CliError> {
         match query {
             CliSubQuery::Outputs => todo!("Outputs"),
             CliSubQuery::Inputs => todo!("Inputs"),
             CliSubQuery::Windows => todo!("Windows"),
+            CliSubQuery::FocusedWindow => todo!("FocusedWindow"),
+            CliSubQuery::FocusedWorkspace => todo!("FocusedWorkspace"),
         }
     }
 
@@ -101,6 +110,7 @@ impl Cli {
         todo!("First implement config logic - Validate config:{config:?}");
     }
 
+    // TODO: Move that to system installation process
     fn handle_make_completion(
         shell: &Option<clap_complete::Shell>,
         stdout: &bool,
@@ -140,6 +150,7 @@ fn get_shell() -> Option<clap_complete::Shell> {
     }
 }
 
+// TODO: make that prefer files that consent require root
 fn get_shell_completion_file(shell: clap_complete::Shell) -> Result<std::fs::File, CliError> {
     #[rustfmt::skip]
     let file_path = std::path::PathBuf::from(match shell {
