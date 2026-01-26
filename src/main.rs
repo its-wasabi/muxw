@@ -65,13 +65,13 @@ mod path;
 
 fn main() {
     let cli = cli::Cli::parse();
+    match exit_on_error(cli.handle(), 1) {
+        cli::CliHandleOutcome::Exit => return,
+        cli::CliHandleOutcome::Continue => (),
+    }
     let path = exit_on_error(path::Path::new(&cli), 1);
     CLI.set(cli);
     PATH.set(path);
-    #[allow(clippy::collapsible_if)]
-    if let Some(cli) = CLI.get() {
-        exit_on_error(cli.handle(), 1);
-    }
 
     here!("Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}",);
 
