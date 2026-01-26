@@ -26,8 +26,6 @@ fn exit_on_error<T, E: std::fmt::Display>(result: Result<T, E>, code: i32) -> T 
     })
 }
 
-use clap::Parser;
-
 const NAME: &str = env!("CARGO_PKG_NAME");
 const NAME_C: &std::ffi::CStr = unsafe {
     std::ffi::CStr::from_bytes_with_nul_unchecked(concat!(env!("CARGO_PKG_NAME"), "\0").as_bytes())
@@ -56,24 +54,26 @@ const fn parse_version(version: &str) -> (u32, u32, u32) {
 }
 const VERSION: (u32, u32, u32) = parse_version(env!("CARGO_PKG_VERSION"));
 
-static CLI: std::sync::OnceLock<cli::Cli> = std::sync::OnceLock::new();
-static PATH: std::sync::OnceLock<path::Path> = std::sync::OnceLock::new();
+static CLI: utils::global::Global<cli::Cli> = utils::global::Global::new();
+static PATH: utils::global::Global<path::Path> = utils::global::Global::new();
 
 mod cli;
 mod compositor;
 mod path;
+mod utils;
 
 fn main() {
+    use clap::Parser;
     let cli = cli::Cli::parse();
     match exit_on_error(cli.handle(), 1) {
         cli::CliHandleOutcome::Exit => return,
         cli::CliHandleOutcome::Continue => (),
     }
     let path = exit_on_error(path::Path::new(&cli), 1);
-    CLI.set(cli);
-    PATH.set(path);
+    CLI.init(cli);
+    PATH.init(path);
 
-    here!("Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}",);
+    here!("Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}");
 
     let mut ray = compositor::Compositor::new();
     ray.run();
