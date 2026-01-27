@@ -58,7 +58,7 @@ impl KeyboardConfig {
 impl mlua::UserData for KeyboardConfig {
     fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method_mut("layout", |_, this, layout: KeyboardLayout| {
-            this.layout = Some(layou);
+            this.layout = Some(layout);
             Ok(this.clone())
         });
 
