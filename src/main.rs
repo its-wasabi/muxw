@@ -1,3 +1,4 @@
+// IMPORTANT: Move all error enums to separate file
 #![allow(unused)]
 macro_rules! here {
     () => {
@@ -59,6 +60,8 @@ static PATH: utils::global::Global<path::Path> = utils::global::Global::new();
 
 mod cli;
 mod compositor;
+mod config;
+mod error;
 mod path;
 mod utils;
 
@@ -76,5 +79,4 @@ fn main() {
     here!("Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}");
 
     let mut ray = compositor::Compositor::new();
-    ray.run();
 }

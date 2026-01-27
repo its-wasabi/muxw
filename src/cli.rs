@@ -65,47 +65,8 @@ pub enum CliHandleOutcome {
     Continue,
 }
 
-#[derive(Debug)]
-pub enum CliError {
-    ShellNotSupported {
-        shell: String,
-    },
-    ShellNotDetected,
-    PermissionDenied {
-        path: std::path::PathBuf,
-    },
-    Io {
-        action: &'static str,
-        source: std::io::Error,
-    },
-}
-
-impl std::fmt::Display for CliError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CliError::ShellNotSupported { shell } => write!(f, "{shell} is not supported"),
-            CliError::ShellNotDetected => write!(f, "Could not detect the current shell"),
-            CliError::PermissionDenied { path } => write!(
-                f,
-                "Permission denied while writing \"{}\". Try running as root.",
-                path.display()
-            ),
-            CliError::Io { action, source } => write!(f, "Failed to {action}: {source}"),
-        }
-    }
-}
-
-impl std::error::Error for CliError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            CliError::Io { action, source } => Some(source),
-            _ => None,
-        }
-    }
-}
-
 impl Cli {
-    pub fn handle(&self) -> Result<CliHandleOutcome, CliError> {
+    pub fn handle(&self) -> Result<CliHandleOutcome, crate::error::CliError> {
         match &self.subcommand {
             Some(CliSub::Query { query, json }) => {
                 Self::handle_query(query, json)?;
@@ -126,7 +87,7 @@ impl Cli {
         }
     }
 
-    fn handle_query(query: &CliSubQuery, json: &bool) -> Result<(), CliError> {
+    fn handle_query(query: &CliSubQuery, json: &bool) -> Result<(), crate::error::CliError> {
         match query {
             CliSubQuery::Outputs => todo!("Outputs"),
             CliSubQuery::Inputs => todo!("Inputs"),
@@ -136,7 +97,7 @@ impl Cli {
         }
     }
 
-    fn handle_validate(config: &Option<std::path::PathBuf>) -> Result<(), CliError> {
+    fn handle_validate(config: &Option<std::path::PathBuf>) -> Result<(), crate::error::CliError> {
         todo!("First implement config logic - Validate config:{config:?}");
     }
 
@@ -144,7 +105,7 @@ impl Cli {
     fn handle_make_completion(
         shell: &Option<clap_complete::Shell>,
         stdout: &bool,
-    ) -> Result<(), CliError> {
+    ) -> Result<(), crate::error::CliError> {
         use clap::CommandFactory;
         let mut cmd = Cli::command();
 
@@ -165,26 +126,28 @@ impl Cli {
     }
 }
 
-fn get_shell() -> Result<clap_complete::Shell, CliError> {
-    let shell_var = std::env::var("SHELL").map_err(|_| CliError::ShellNotDetected)?;
+fn get_shell() -> Result<clap_complete::Shell, crate::error::CliError> {
+    let shell_var = std::env::var("SHELL").map_err(|_| crate::error::CliError::ShellNotDetected)?;
     let shell_name = std::path::Path::new(&shell_var)
         .file_name()
         .and_then(|sh| sh.to_str())
-        .ok_or(CliError::ShellNotDetected)?;
+        .ok_or(crate::error::CliError::ShellNotDetected)?;
 
     match shell_name {
         sh if sh.contains("bash") => Ok(clap_complete::Shell::Bash),
         sh if sh.contains("zsh") => Ok(clap_complete::Shell::Zsh),
         sh if sh.contains("fish") => Ok(clap_complete::Shell::Fish),
         sh if sh.contains("elvish") => Ok(clap_complete::Shell::Elvish),
-        _ => Err(CliError::ShellNotSupported {
+        _ => Err(crate::error::CliError::ShellNotSupported {
             shell: shell_name.to_string(),
         }),
     }
 }
 
 // TODO: make that prefer files that consent require root
-fn get_shell_completion_file(shell: clap_complete::Shell) -> Result<std::fs::File, CliError> {
+fn get_shell_completion_file(
+    shell: clap_complete::Shell,
+) -> Result<std::fs::File, crate::error::CliError> {
     #[rustfmt::skip]
     let path = std::path::PathBuf::from(match shell {
         clap_complete::Shell::Bash => format!("/usr/share/bash-completion/completions/{}", crate::NAME),
@@ -196,7 +159,7 @@ fn get_shell_completion_file(shell: clap_complete::Shell) -> Result<std::fs::Fil
     });
 
     if let Some(dir_path) = path.parent() {
-        std::fs::create_dir_all(dir_path).map_err(|err| CliError::Io {
+        std::fs::create_dir_all(dir_path).map_err(|err| crate::error::CliError::Io {
             action: "create completion directory",
             source: err,
         })?;
@@ -204,9 +167,9 @@ fn get_shell_completion_file(shell: clap_complete::Shell) -> Result<std::fs::Fil
 
     std::fs::File::create(&path).map_err(|err| {
         if err.kind() == std::io::ErrorKind::PermissionDenied {
-            CliError::PermissionDenied { path }
+            crate::error::CliError::PermissionDenied { path }
         } else {
-            CliError::Io {
+            crate::error::CliError::Io {
                 action: "create completion file",
                 source: err,
             }
