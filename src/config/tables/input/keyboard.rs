@@ -1,6 +1,8 @@
+use mlua::LuaSerdeExt;
+
 pub fn create_input_keyboard_table(
     lua: &mlua::Lua,
-    state: std::rc::Rc<std::cell::RefCell<crate::config::ConfigState>>,
+    state: &crate::config::ConfigState,
 ) -> Result<mlua::Table, crate::error::InitError> {
     let input_keyboard_table = lua
         .create_table()
@@ -8,6 +10,18 @@ pub fn create_input_keyboard_table(
             action: "create Ray.input.keyboard table",
             source: err,
         })?;
+
+    let state_keyboard_arc = std::sync::Arc::clone(&state.keyboard);
+    input_keyboard_table.set(
+        "get",
+        lua.create_function(move |_, criteria: KeyboardCriteria| {
+            Ok(KeyboardConfig::new(
+                criteria,
+                std::sync::Arc::downgrade(&state_keyboard_arc),
+            ))
+        })
+        .unwrap(),
+    );
 
     Ok(input_keyboard_table)
 }
@@ -25,10 +39,10 @@ pub struct KeyboardConfig {
     pub layout: Option<KeyboardLayout>,
     pub options: Option<KeyboardOptions>,
 
-    config_state: std::rc::Weak<std::cell::RefCell<crate::config::ConfigState>>,
+    config_state: std::sync::Weak<parking_lot::RwLock<Vec<KeyboardConfig>>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct KeyboardCriteria {
     pub name: Option<String>,
     pub port: Option<String>,
@@ -44,7 +58,7 @@ pub struct KeyboardOptions(pub String);
 impl KeyboardConfig {
     fn new(
         criteria: KeyboardCriteria,
-        state: std::rc::Weak<std::cell::RefCell<crate::config::ConfigState>>,
+        state: std::sync::Weak<parking_lot::RwLock<Vec<KeyboardConfig>>>,
     ) -> Self {
         Self {
             criteria,
@@ -52,6 +66,34 @@ impl KeyboardConfig {
             layout: None,
             options: None,
         }
+    }
+}
+
+impl KeyboardCriteria {
+    pub fn is_wildcard(&self) -> bool {
+        self.name.is_none() && self.port.is_none() && self.seat.is_none()
+    }
+
+    pub fn matches(
+        &self,
+        kb_name: Option<&str>,
+        kb_port: Option<&str>,
+        kb_seat: Option<&str>,
+    ) -> bool {
+        let name_matches = self
+            .name
+            .as_ref()
+            .map_or(true, |n| Some(n.as_str()) == kb_name);
+        let port_matches = self
+            .port
+            .as_ref()
+            .map_or(true, |p| Some(p.as_str()) == kb_port);
+        let seat_matches = self
+            .seat
+            .as_ref()
+            .map_or(true, |s| Some(s.as_str()) == kb_seat);
+
+        name_matches && port_matches && seat_matches
     }
 }
 
@@ -75,11 +117,17 @@ impl mlua::UserData for KeyboardConfig {
             );
 
             if let Some(state) = this.config_state.upgrade() {
-                state.borrow_mut().keyboard.push(this.clone());
+                state.write().push(this.clone());
             }
 
             Ok(())
         });
+    }
+}
+
+impl mlua::FromLua for KeyboardCriteria {
+    fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
+        lua.from_value(value)
     }
 }
 

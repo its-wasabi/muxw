@@ -2,7 +2,7 @@ pub mod keyboard;
 
 pub fn create_input_table(
     lua: &mlua::Lua,
-    state: std::rc::Rc<std::cell::RefCell<crate::config::ConfigState>>,
+    state: &crate::config::ConfigState,
 ) -> Result<mlua::Table, crate::error::InitError> {
     let input_table = lua
         .create_table()

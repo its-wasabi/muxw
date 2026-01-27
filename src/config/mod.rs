@@ -6,12 +6,10 @@ pub struct Config {
     pub state: ConfigState,
 }
 
-// Keep here config structs only for the specyfik part of program so you can clone smaller part
-// of the config state and pass that to the part of program that requires it
-// And thanks to that you can store jus
 #[derive(Debug)]
 pub struct ConfigState {
-    keyboard: Vec<tables::input::keyboard::KeyboardConfig>,
+    pub keyboard: std::sync::Arc<parking_lot::RwLock<Vec<tables::input::keyboard::KeyboardConfig>>>,
+    pub mouse: std::sync::Arc<parking_lot::RwLock<Vec<()>>>,
 }
 
 impl Config {
@@ -28,21 +26,16 @@ impl Config {
                 source: err,
             })?;
 
-        let state = std::rc::Rc::new(std::cell::RefCell::new(ConfigState::new()));
+        let state = ConfigState::new();
 
         lua.globals()
-            .set(
-                "Ray",
-                tables::create_global_table(&lua, std::rc::Rc::clone(&state))?,
-            )
+            .set("Ray", tables::create_global_table(&lua, &state)?)
             .map_err(|err| crate::error::InitError::Mlua {
                 action: "set global Ray",
                 source: err,
             });
 
-        let state = std::rc::Rc::try_unwrap(state)
-            .expect("HANDLE ERRORS - Failed to unwrap")
-            .into_inner();
+        // EXEC HERE
 
         Ok(Self { lua, state })
     }
@@ -51,7 +44,8 @@ impl Config {
 impl ConfigState {
     fn new() -> Self {
         Self {
-            keyboard: Vec::new(),
+            keyboard: std::sync::Arc::new(parking_lot::RwLock::new(Vec::new())),
+            mouse: std::sync::Arc::new(parking_lot::RwLock::new(Vec::new())),
         }
     }
 }

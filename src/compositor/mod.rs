@@ -17,6 +17,7 @@ impl Compositor {
         // let globals = globals::Globals::new();
 
         let config = crate::config::Config::new()?;
+        println!("config.kb.weak: {:?}", config.state.keyboard);
 
         Ok(Self {
             display,
@@ -29,11 +30,7 @@ impl Compositor {
     pub fn run(&mut self) {}
 }
 
-
-
-
-pub struct Socket {
-}
+pub struct Socket {}
 
 // NOTE: Read that
 // pub fn new_auto() -> Result<ListeningSocketSource, BindError> {
