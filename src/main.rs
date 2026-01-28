@@ -27,6 +27,14 @@ fn exit_on_error<T, E: std::fmt::Display>(result: Result<T, E>, code: i32) -> T 
     })
 }
 
+const DEFAULT_CONFIG: &str = r#"print("INSIDE LUA")
+Ray.bind("W", Ray.motion.focus.up);
+Ray.bind("S", Ray.motion.focus.down);
+Ray.bind("D", Ray.motion.focus.right);
+Ray.bind("A", Ray.motion.focus.left);
+print("LUA DONE")
+"#;
+
 const NAME: &str = env!("CARGO_PKG_NAME");
 const NAME_C: &std::ffi::CStr = unsafe {
     std::ffi::CStr::from_bytes_with_nul_unchecked(concat!(env!("CARGO_PKG_NAME"), "\0").as_bytes())

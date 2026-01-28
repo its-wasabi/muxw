@@ -48,8 +48,8 @@ fn expand_tilde(path: std::path::PathBuf) -> Result<std::path::PathBuf, crate::e
 
 #[derive(Debug)]
 pub struct Path {
-    config_dir: std::path::PathBuf,
-    config_file: std::path::PathBuf,
+    pub config_dir: std::path::PathBuf,
+    pub config_file: std::path::PathBuf,
 }
 
 impl Path {

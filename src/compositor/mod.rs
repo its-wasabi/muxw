@@ -16,8 +16,7 @@ impl Compositor {
             })?;
         // let globals = globals::Globals::new();
 
-        let config = crate::config::Config::new()?;
-        println!("config.kb.weak: {:?}", config.state.keyboard);
+        let config = crate::config::Config::new(&crate::PATH.get().config_file)?;
 
         Ok(Self {
             display,

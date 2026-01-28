@@ -70,10 +70,19 @@ impl KeyboardConfig {
 }
 
 impl KeyboardCriteria {
+    pub fn from_input_device(input_device: &input::Device) -> Self {
+        Self {
+            name: Some(input_device.name().to_string()),
+            port: Some(input_device.sysname().to_string()),
+            seat: Some(input_device.seat().logical_name().to_string()),
+        }
+    }
+
     pub fn is_wildcard(&self) -> bool {
         self.name.is_none() && self.port.is_none() && self.seat.is_none()
     }
 
+    // TODO: Make that foo exit early if doesn't match
     pub fn matches(
         &self,
         kb_name: Option<&str>,
@@ -83,15 +92,15 @@ impl KeyboardCriteria {
         let name_matches = self
             .name
             .as_ref()
-            .map_or(true, |n| Some(n.as_str()) == kb_name);
+            .is_none_or(|n| Some(n.as_str()) == kb_name);
         let port_matches = self
             .port
             .as_ref()
-            .map_or(true, |p| Some(p.as_str()) == kb_port);
+            .is_none_or(|p| Some(p.as_str()) == kb_port);
         let seat_matches = self
             .seat
             .as_ref()
-            .map_or(true, |s| Some(s.as_str()) == kb_seat);
+            .is_none_or(|s| Some(s.as_str()) == kb_seat);
 
         name_matches && port_matches && seat_matches
     }
