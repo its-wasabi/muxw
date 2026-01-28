@@ -1,7 +1,5 @@
 use mlua::LuaSerdeExt;
 
-use crate::config::Publishable;
-
 pub fn create_input_keyboard_table(
     lua: &mlua::Lua,
     state: std::rc::Rc<crate::config::ConfigState>,
@@ -13,16 +11,24 @@ pub fn create_input_keyboard_table(
             source: err,
         })?;
 
-    input_keyboard_table.set(
-        "get",
-        lua.create_function(move |_, criteria: KeyboardCriteria| {
-            Ok(KeyboardConfigBuilder::new(
-                criteria,
-                std::rc::Rc::clone(&state),
-            ))
-        })
-        .unwrap(),
-    );
+    input_keyboard_table
+        .set(
+            "get",
+            lua.create_function(move |_, criteria: KeyboardCriteria| {
+                Ok(KeyboardConfigBuilder::new(
+                    criteria,
+                    std::rc::Rc::clone(&state),
+                ))
+            })
+            .map_err(|err| crate::error::InitError::Mlua {
+                action: "create Ray.input.keyboard.get() function",
+                source: err,
+            })?,
+        )
+        .map_err(|err| crate::error::InitError::Mlua {
+            action: "set Ray.input.keyboard.get() function",
+            source: err,
+        })?;
 
     Ok(input_keyboard_table)
 }
@@ -34,9 +40,8 @@ fn table_to_comma_string(table: &mlua::Table) -> mlua::Result<String> {
     Ok(items.join(","))
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct KeyboardConfig {
-    pub criteria: KeyboardCriteria,
     pub layout: KeyboardLayout,
     pub options: KeyboardOptions,
 }
@@ -50,7 +55,7 @@ pub struct KeyboardConfigBuilder {
     state: std::rc::Rc<crate::config::ConfigState>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize, Hash)]
 pub struct KeyboardCriteria {
     pub name: Option<String>,
     pub port: Option<String>,
@@ -77,18 +82,20 @@ impl KeyboardConfigBuilder {
 impl crate::config::Publishable for KeyboardConfigBuilder {
     fn apply(&self, state: &crate::config::ConfigState) {
         here!(
-            "Apply {:?} optiosn: {:?}, layout: {:?}",
+            "CONFIG: Apply {:?} options: {:?}, layout: {:?}",
             self.criteria,
             self.options,
             self.layout
         );
 
         state.with_builder(|builder| {
-            builder.keyboards.push(KeyboardConfig {
-                criteria: self.criteria.clone(),
-                layout: self.layout.clone(),
-                options: self.options.clone(),
-            });
+            builder.keyboards.insert(
+                self.criteria.clone(),
+                KeyboardConfig {
+                    layout: self.layout.clone(),
+                    options: self.options.clone(),
+                },
+            );
         });
 
         state.publish();
@@ -145,7 +152,9 @@ impl mlua::UserData for KeyboardConfigBuilder {
         });
 
         methods.add_method("apply", |_, this, ()| {
+            use crate::config::Publishable;
             this.apply(&this.state);
+
             Ok(())
         });
     }

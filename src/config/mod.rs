@@ -10,13 +10,22 @@ pub struct ConfigState {
     snapshot: arc_swap::ArcSwap<ConfigSnapshot>,
 }
 
+#[derive(Debug)]
 pub struct ConfigBuilder {
-    keyboards: Vec<tables::input::keyboard::KeyboardConfig>,
+    keyboards: std::collections::HashMap<
+        tables::input::keyboard::KeyboardCriteria,
+        tables::input::keyboard::KeyboardConfig,
+    >,
     mices: Vec<()>,
 }
 
 pub struct ConfigSnapshot {
-    pub keyboards: std::sync::Arc<Vec<tables::input::keyboard::KeyboardConfig>>,
+    pub keyboards: std::sync::Arc<
+        std::collections::HashMap<
+            tables::input::keyboard::KeyboardCriteria,
+            tables::input::keyboard::KeyboardConfig,
+        >,
+    >,
     pub mices: std::sync::Arc<Vec<()>>,
 }
 
@@ -58,6 +67,8 @@ impl Config {
                 source: err,
             })?;
 
+        here!("CONFIG STATE BUILDER: {:#?}", state.builder);
+
         Ok(Self { lua, state })
     }
 
@@ -84,13 +95,13 @@ impl Config {
 impl ConfigState {
     fn new() -> Self {
         let builder = std::rc::Rc::new(std::cell::RefCell::new(ConfigBuilder {
-            keyboards: Vec::with_capacity(1),
-            mices: Vec::with_capacity(1),
+            keyboards: std::collections::HashMap::with_capacity(2),
+            mices: Vec::with_capacity(2),
         }));
 
         let snapshot = ConfigSnapshot {
-            keyboards: std::sync::Arc::new(Vec::with_capacity(1)),
-            mices: std::sync::Arc::new(Vec::with_capacity(1)),
+            keyboards: std::sync::Arc::new(std::collections::HashMap::with_capacity(2)),
+            mices: std::sync::Arc::new(Vec::with_capacity(2)),
         };
 
         Self {
