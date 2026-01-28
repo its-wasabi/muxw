@@ -37,15 +37,15 @@ fn table_to_comma_string(table: &mlua::Table) -> mlua::Result<String> {
 #[derive(Clone)]
 pub struct KeyboardConfig {
     pub criteria: KeyboardCriteria,
-    pub layout: Option<KeyboardLayout>,
-    pub options: Option<KeyboardOptions>,
+    pub layout: KeyboardLayout,
+    pub options: KeyboardOptions,
 }
 
 #[derive(Clone)]
 pub struct KeyboardConfigBuilder {
     criteria: KeyboardCriteria,
-    layout: Option<KeyboardLayout>,
-    options: Option<KeyboardOptions>,
+    layout: KeyboardLayout,
+    options: KeyboardOptions,
 
     state: std::rc::Rc<crate::config::ConfigState>,
 }
@@ -58,17 +58,17 @@ pub struct KeyboardCriteria {
 }
 
 #[derive(Debug, Clone)]
-pub struct KeyboardLayout(pub String);
+pub struct KeyboardLayout(pub Option<String>);
 
 #[derive(Debug, Clone)]
-pub struct KeyboardOptions(pub String);
+pub struct KeyboardOptions(pub Option<String>);
 
 impl KeyboardConfigBuilder {
     fn new(criteria: KeyboardCriteria, state: std::rc::Rc<crate::config::ConfigState>) -> Self {
         Self {
             criteria,
-            layout: None,
-            options: None,
+            layout: KeyboardLayout(None),
+            options: KeyboardOptions(None),
             state,
         }
     }
@@ -135,12 +135,12 @@ impl KeyboardCriteria {
 impl mlua::UserData for KeyboardConfigBuilder {
     fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method_mut("layout", |_, this, layout: KeyboardLayout| {
-            this.layout = Some(layout);
+            this.layout = layout;
             Ok(())
         });
 
         methods.add_method_mut("options", |_, this, options: KeyboardOptions| {
-            this.options = Some(options);
+            this.options = options;
             Ok(())
         });
 
@@ -153,15 +153,23 @@ impl mlua::UserData for KeyboardConfigBuilder {
 
 impl mlua::FromLua for KeyboardCriteria {
     fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
-        lua.from_value(value)
+        match value {
+            mlua::Value::Nil => Ok(KeyboardCriteria {
+                name: None,
+                port: None,
+                seat: None,
+            }),
+            _ => lua.from_value(value),
+        }
     }
 }
 
 impl mlua::FromLua for KeyboardLayout {
     fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
         match value {
-            mlua::Value::String(string) => Ok(KeyboardLayout(string.to_str()?.to_string())),
-            mlua::Value::Table(table) => Ok(KeyboardLayout(table_to_comma_string(&table)?)),
+            mlua::Value::String(string) => Ok(KeyboardLayout(Some(string.to_str()?.to_string()))),
+            mlua::Value::Table(table) => Ok(KeyboardLayout(Some(table_to_comma_string(&table)?))),
+            mlua::Value::Nil => Ok(KeyboardLayout(None)),
             _ => Err(mlua::Error::FromLuaConversionError {
                 from: value.type_name(),
                 to: String::from("Keyboard Layout"),
@@ -174,8 +182,9 @@ impl mlua::FromLua for KeyboardLayout {
 impl mlua::FromLua for KeyboardOptions {
     fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
         match value {
-            mlua::Value::String(string) => Ok(KeyboardOptions(string.to_str()?.to_string())),
-            mlua::Value::Table(table) => Ok(KeyboardOptions(table_to_comma_string(&table)?)),
+            mlua::Value::String(string) => Ok(KeyboardOptions(Some(string.to_str()?.to_string()))),
+            mlua::Value::Table(table) => Ok(KeyboardOptions(Some(table_to_comma_string(&table)?))),
+            mlua::Value::Nil => Ok(KeyboardOptions(None)),
             _ => Err(mlua::Error::FromLuaConversionError {
                 from: value.type_name(),
                 to: String::from("Keyboard Options"),
