@@ -1,3 +1,8 @@
+use wayland_protocols::xdg::shell::server::xdg_wm_base::XdgWmBase;
+use wayland_server::protocol::{
+    wl_compositor::WlCompositor, wl_output::WlOutput, wl_seat::WlSeat, wl_shm::WlShm,
+};
+
 mod globals;
 
 pub struct Compositor {
@@ -14,19 +19,80 @@ impl Compositor {
                 action: "init wayland display",
                 source: err,
             })?;
-        // let globals = globals::Globals::new();
+        let globals = globals::Globals::new(&display.handle());
 
         let config = crate::config::Config::new(&crate::PATH.get().config_file)?;
 
         Ok(Self {
             display,
-            globals: todo!("Implement globals createion"),
-
+            globals,
             config,
         })
     }
 
     pub fn run(&mut self) {}
+}
+
+impl wayland_server::GlobalDispatch<WlCompositor, ()> for Compositor {
+    fn bind(
+        state: &mut Self,
+        handle: &wayland_server::DisplayHandle,
+        client: &wayland_server::Client,
+        resource: wayland_server::New<WlCompositor>,
+        global_data: &(),
+        data_init: &mut wayland_server::DataInit<'_, Self>,
+    ) {
+        todo!()
+    }
+}
+
+impl wayland_server::GlobalDispatch<WlShm, ()> for Compositor {
+    fn bind(
+        state: &mut Self,
+        handle: &wayland_server::DisplayHandle,
+        client: &wayland_server::Client,
+        resource: wayland_server::New<WlShm>,
+        global_data: &(),
+        data_init: &mut wayland_server::DataInit<'_, Self>,
+    ) {
+        todo!()
+    }
+}
+impl wayland_server::GlobalDispatch<XdgWmBase, ()> for Compositor {
+    fn bind(
+        state: &mut Self,
+        handle: &wayland_server::DisplayHandle,
+        client: &wayland_server::Client,
+        resource: wayland_server::New<XdgWmBase>,
+        global_data: &(),
+        data_init: &mut wayland_server::DataInit<'_, Self>,
+    ) {
+        todo!()
+    }
+}
+impl wayland_server::GlobalDispatch<WlSeat, ()> for Compositor {
+    fn bind(
+        state: &mut Self,
+        handle: &wayland_server::DisplayHandle,
+        client: &wayland_server::Client,
+        resource: wayland_server::New<WlSeat>,
+        global_data: &(),
+        data_init: &mut wayland_server::DataInit<'_, Self>,
+    ) {
+        todo!()
+    }
+}
+impl wayland_server::GlobalDispatch<WlOutput, ()> for Compositor {
+    fn bind(
+        state: &mut Self,
+        handle: &wayland_server::DisplayHandle,
+        client: &wayland_server::Client,
+        resource: wayland_server::New<WlOutput>,
+        global_data: &(),
+        data_init: &mut wayland_server::DataInit<'_, Self>,
+    ) {
+        todo!()
+    }
 }
 
 pub struct Socket {}
