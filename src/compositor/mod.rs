@@ -20,7 +20,7 @@ impl Compositor {
 
         Ok(Self {
             display,
-            globals: todo!(""),
+            globals: todo!("Implement globals createion"),
 
             config,
         })

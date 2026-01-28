@@ -1,4 +1,3 @@
-// IMPORTANT: Move all error enums to separate file
 #![allow(unused)]
 macro_rules! here {
     () => {

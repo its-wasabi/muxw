@@ -20,6 +20,10 @@ pub struct ConfigSnapshot {
     pub mices: std::sync::Arc<Vec<()>>,
 }
 
+pub trait Publishable {
+    fn apply(&self, state: &ConfigState);
+}
+
 impl Config {
     pub fn new(path: &std::path::Path) -> Result<Self, crate::error::InitError> {
         let libs = mlua::StdLib::TABLE
@@ -46,7 +50,7 @@ impl Config {
                 source: err,
             });
 
-        let config_source = Self::read_config_source(path).unwrap(); //TODO: .map_err(|err|)?;
+        let config_source = Self::read_config_source(path).unwrap(); // TODO: .map_err(|err|)?;
         lua.load(config_source)
             .exec()
             .map_err(|err| crate::error::InitError::Mlua {
@@ -80,13 +84,13 @@ impl Config {
 impl ConfigState {
     fn new() -> Self {
         let builder = std::rc::Rc::new(std::cell::RefCell::new(ConfigBuilder {
-            keyboards: Vec::new(),
-            mices: Vec::new(),
+            keyboards: Vec::with_capacity(1),
+            mices: Vec::with_capacity(1),
         }));
 
         let snapshot = ConfigSnapshot {
-            keyboards: std::sync::Arc::new(Vec::new()),
-            mices: std::sync::Arc::new(Vec::new()),
+            keyboards: std::sync::Arc::new(Vec::with_capacity(1)),
+            mices: std::sync::Arc::new(Vec::with_capacity(1)),
         };
 
         Self {
@@ -95,35 +99,25 @@ impl ConfigState {
         }
     }
 
+    pub fn snapshot(&self) -> std::sync::Arc<ConfigSnapshot> {
+        self.snapshot.load_full()
+    }
+
+    fn with_builder<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut ConfigBuilder) -> R,
+    {
+        let mut builder = self.builder.borrow_mut();
+        f(&mut builder)
+    }
+
     fn publish(&self) {
         let builder = self.builder.borrow();
-
         let snapshot = ConfigSnapshot {
             keyboards: std::sync::Arc::new(builder.keyboards.clone()),
             mices: std::sync::Arc::new(builder.mices.clone()),
         };
 
         self.snapshot.store(std::sync::Arc::new(snapshot));
-    }
-
-    pub fn snapshot(&self) -> std::sync::Arc<ConfigSnapshot> {
-        self.snapshot.load_full()
-    }
-}
-
-#[derive(Clone)]
-pub struct ConfigStateHandle {
-    publish: std::rc::Rc<dyn Fn()>,
-}
-
-impl ConfigStateHandle {
-    pub fn new(state: std::rc::Rc<ConfigState>) -> Self {
-        Self {
-            publish: std::rc::Rc::new(move || state.publish()),
-        }
-    }
-
-    pub fn publish(&self) {
-        (self.publish)()
     }
 }
