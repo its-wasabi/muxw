@@ -2,7 +2,7 @@ pub mod input;
 
 pub fn create_global_table(
     lua: &mlua::Lua,
-    state: &crate::config::ConfigState,
+    state: std::rc::Rc<crate::config::ConfigState>,
 ) -> Result<mlua::Table, crate::error::InitError> {
     let global_table = lua
         .create_table()

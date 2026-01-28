@@ -2,7 +2,7 @@ use mlua::LuaSerdeExt;
 
 pub fn create_input_keyboard_table(
     lua: &mlua::Lua,
-    state: &crate::config::ConfigState,
+    state: std::rc::Rc<crate::config::ConfigState>,
 ) -> Result<mlua::Table, crate::error::InitError> {
     let input_keyboard_table = lua
         .create_table()
@@ -11,13 +11,16 @@ pub fn create_input_keyboard_table(
             source: err,
         })?;
 
-    let state_keyboard_arc = std::sync::Arc::clone(&state.keyboard);
+    let builder = state.builder.clone();
+    let handle = crate::config::ConfigStateHandle::new(state);
+
     input_keyboard_table.set(
         "get",
         lua.create_function(move |_, criteria: KeyboardCriteria| {
-            Ok(KeyboardConfig::new(
+            Ok(KeyboardConfigBuilder::new(
                 criteria,
-                std::sync::Arc::downgrade(&state_keyboard_arc),
+                builder.clone(),
+                handle.clone(),
             ))
         })
         .unwrap(),
@@ -33,38 +36,48 @@ fn table_to_comma_string(table: &mlua::Table) -> mlua::Result<String> {
     Ok(items.join(","))
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct KeyboardConfig {
     pub criteria: KeyboardCriteria,
     pub layout: Option<KeyboardLayout>,
     pub options: Option<KeyboardOptions>,
-
-    config_state: std::sync::Weak<parking_lot::RwLock<Vec<KeyboardConfig>>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone)]
+pub struct KeyboardConfigBuilder {
+    criteria: KeyboardCriteria,
+    layout: Option<KeyboardLayout>,
+    options: Option<KeyboardOptions>,
+
+    builder: std::rc::Rc<std::cell::RefCell<crate::config::ConfigBuilder>>,
+    state: crate::config::ConfigStateHandle,
+}
+
+#[derive(Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct KeyboardCriteria {
     pub name: Option<String>,
     pub port: Option<String>,
     pub seat: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct KeyboardLayout(pub String);
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct KeyboardOptions(pub String);
 
-impl KeyboardConfig {
+impl KeyboardConfigBuilder {
     fn new(
         criteria: KeyboardCriteria,
-        state: std::sync::Weak<parking_lot::RwLock<Vec<KeyboardConfig>>>,
+        builder: std::rc::Rc<std::cell::RefCell<crate::config::ConfigBuilder>>,
+        state: crate::config::ConfigStateHandle,
     ) -> Self {
         Self {
             criteria,
-            config_state: state,
             layout: None,
             options: None,
+            builder,
+            state,
         }
     }
 }
@@ -106,7 +119,7 @@ impl KeyboardCriteria {
     }
 }
 
-impl mlua::UserData for KeyboardConfig {
+impl mlua::UserData for KeyboardConfigBuilder {
     fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method_mut("layout", |_, this, layout: KeyboardLayout| {
             this.layout = Some(layout);
@@ -119,15 +132,17 @@ impl mlua::UserData for KeyboardConfig {
         });
 
         methods.add_method("apply", |_, this, ()| {
-            here!(
-                "Apply called layout: {:?}, options: {:?}",
-                this.layout,
-                this.options
-            );
+            {
+                let mut builder = this.builder.borrow_mut();
 
-            if let Some(state) = this.config_state.upgrade() {
-                state.write().push(this.clone());
+                builder.keyboards.push(KeyboardConfig {
+                    criteria: this.criteria.clone(),
+                    layout: this.layout.clone(),
+                    options: this.options.clone(),
+                });
             }
+
+            this.state.publish();
 
             Ok(())
         });

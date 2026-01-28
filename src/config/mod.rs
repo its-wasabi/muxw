@@ -1,15 +1,23 @@
 mod tables;
 
-#[derive(Debug)]
 pub struct Config {
     lua: mlua::Lua,
-    pub state: ConfigState,
+    state: std::rc::Rc<ConfigState>,
 }
 
-#[derive(Debug)]
 pub struct ConfigState {
-    pub keyboard: std::sync::Arc<parking_lot::RwLock<Vec<tables::input::keyboard::KeyboardConfig>>>,
-    pub mouse: std::sync::Arc<parking_lot::RwLock<Vec<()>>>,
+    builder: std::rc::Rc<std::cell::RefCell<ConfigBuilder>>,
+    snapshot: arc_swap::ArcSwap<ConfigSnapshot>,
+}
+
+pub struct ConfigBuilder {
+    keyboards: Vec<tables::input::keyboard::KeyboardConfig>,
+    mices: Vec<()>,
+}
+
+pub struct ConfigSnapshot {
+    pub keyboards: std::sync::Arc<Vec<tables::input::keyboard::KeyboardConfig>>,
+    pub mices: std::sync::Arc<Vec<()>>,
 }
 
 impl Config {
@@ -26,10 +34,13 @@ impl Config {
                 source: err,
             })?;
 
-        let state = ConfigState::new();
+        let state = std::rc::Rc::new(ConfigState::new());
 
         lua.globals()
-            .set("Ray", tables::create_global_table(&lua, &state)?)
+            .set(
+                "Ray",
+                tables::create_global_table(&lua, std::rc::Rc::clone(&state))?,
+            )
             .map_err(|err| crate::error::InitError::Mlua {
                 action: "set global Ray",
                 source: err,
@@ -68,9 +79,51 @@ impl Config {
 
 impl ConfigState {
     fn new() -> Self {
+        let builder = std::rc::Rc::new(std::cell::RefCell::new(ConfigBuilder {
+            keyboards: Vec::new(),
+            mices: Vec::new(),
+        }));
+
+        let snapshot = ConfigSnapshot {
+            keyboards: std::sync::Arc::new(Vec::new()),
+            mices: std::sync::Arc::new(Vec::new()),
+        };
+
         Self {
-            keyboard: std::sync::Arc::new(parking_lot::RwLock::new(Vec::new())),
-            mouse: std::sync::Arc::new(parking_lot::RwLock::new(Vec::new())),
+            builder,
+            snapshot: arc_swap::ArcSwap::from_pointee(snapshot),
         }
+    }
+
+    fn publish(&self) {
+        let builder = self.builder.borrow();
+
+        let snapshot = ConfigSnapshot {
+            keyboards: std::sync::Arc::new(builder.keyboards.clone()),
+            mices: std::sync::Arc::new(builder.mices.clone()),
+        };
+
+        self.snapshot.store(std::sync::Arc::new(snapshot));
+    }
+
+    pub fn snapshot(&self) -> std::sync::Arc<ConfigSnapshot> {
+        self.snapshot.load_full()
+    }
+}
+
+#[derive(Clone)]
+pub struct ConfigStateHandle {
+    publish: std::rc::Rc<dyn Fn()>,
+}
+
+impl ConfigStateHandle {
+    pub fn new(state: std::rc::Rc<ConfigState>) -> Self {
+        Self {
+            publish: std::rc::Rc::new(move || state.publish()),
+        }
+    }
+
+    pub fn publish(&self) {
+        (self.publish)()
     }
 }

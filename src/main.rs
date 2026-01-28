@@ -86,5 +86,5 @@ fn main() {
 
     here!("Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}");
 
-    let mut ray = compositor::Compositor::new();
+    let mut ray = compositor::Compositor::new().expect("err");
 }

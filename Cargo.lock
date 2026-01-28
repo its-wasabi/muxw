@@ -53,6 +53,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arc-swap"
+version = "1.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51d03449bb8ca2cc2ef70869af31463d1ae5ccc8fa3e334b307203fbf815207e"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "ash"
 version = "0.38.0+1.3.281"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -638,6 +647,7 @@ dependencies = [
 name = "ray"
 version = "0.1.0"
 dependencies = [
+ "arc-swap",
  "ash",
  "bitflags",
  "clap",
@@ -648,7 +658,6 @@ dependencies = [
  "gbm",
  "input",
  "mlua",
- "parking_lot",
  "serde",
  "udev",
  "wayland-backend",
