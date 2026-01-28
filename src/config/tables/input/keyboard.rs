@@ -122,20 +122,26 @@ impl KeyboardCriteria {
         kb_port: Option<&str>,
         kb_seat: Option<&str>,
     ) -> bool {
-        let name_matches = self
-            .name
-            .as_ref()
-            .is_none_or(|n| Some(n.as_str()) == kb_name);
-        let port_matches = self
-            .port
-            .as_ref()
-            .is_none_or(|p| Some(p.as_str()) == kb_port);
-        let seat_matches = self
-            .seat
-            .as_ref()
-            .is_none_or(|s| Some(s.as_str()) == kb_seat);
+        #[allow(clippy::collapsible_if)]
+        if let Some(name) = &self.name {
+            if Some(name.as_ref()) != kb_name {
+                return false;
+            }
+        }
+        #[allow(clippy::collapsible_if)]
+        if let Some(port) = &self.port {
+            if Some(port.as_ref()) != kb_port {
+                return false;
+            }
+        }
+        #[allow(clippy::collapsible_if)]
+        if let Some(seat) = &self.seat {
+            if Some(seat.as_ref()) != kb_seat {
+                return false;
+            }
+        }
 
-        name_matches && port_matches && seat_matches
+        true
     }
 }
 
