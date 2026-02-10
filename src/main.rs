@@ -26,12 +26,14 @@ fn exit_on_error<T, E: std::fmt::Display>(result: Result<T, E>, code: i32) -> T 
     })
 }
 
-const DEFAULT_CONFIG: &str = r#"print("INSIDE LUA")
-Ray.bind("W", Ray.motion.focus.up);
-Ray.bind("S", Ray.motion.focus.down);
-Ray.bind("D", Ray.motion.focus.right);
-Ray.bind("A", Ray.motion.focus.left);
-print("LUA DONE")
+const DEFAULT_CONFIG: &str = /* lua */
+    r#"
+    print("INSIDE LUA")
+    Ray.bind("W", Ray.motion.focus.up);
+    Ray.bind("S", Ray.motion.focus.down);
+    Ray.bind("D", Ray.motion.focus.right);
+    Ray.bind("A", Ray.motion.focus.left);
+    print("LUA DONE")
 "#;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
@@ -42,18 +44,18 @@ const NAME_C: &std::ffi::CStr = unsafe {
 const fn parse_version(version: &str) -> (u32, u32, u32) {
     let bytes = version.as_bytes();
     let mut parts = [0u32; 3];
-    let mut current = 0;
-    let mut i = 0;
+    let mut current_part = 0;
 
-    while i < bytes.len() {
-        let byte = bytes[i];
-        if byte == b'.' {
-            current += 1;
-            if current >= 3 {
-                break;
+    let mut i = 0;
+    while i < bytes.len() && current_part < 3 {
+        match bytes[i] {
+            b'0'..=b'9' => {
+                parts[current_part] = parts[current_part] * 10 + (bytes[i] - b'0') as u32;
             }
-        } else if byte >= b'0' && byte <= b'9' && current < 3 {
-            parts[current] = parts[current] * 10 + (byte - b'0') as u32;
+            b'.' => {
+                current_part += 1;
+            }
+            _ => (),
         }
         i += 1;
     }
@@ -86,4 +88,6 @@ fn main() {
     here!("Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}");
 
     let mut ray = compositor::Compositor::new().expect("err");
+
+    println!("hello");
 }
