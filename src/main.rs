@@ -29,10 +29,10 @@ fn exit_on_error<T, E: std::fmt::Display>(result: Result<T, E>, code: i32) -> T 
 const DEFAULT_CONFIG: &str = /* lua */
     r#"
     print("INSIDE LUA")
-    Ray.bind("W", Ray.motion.focus.up);
-    Ray.bind("S", Ray.motion.focus.down);
-    Ray.bind("D", Ray.motion.focus.right);
-    Ray.bind("A", Ray.motion.focus.left);
+    Muxw.bind("W", Muxw.motion.focus.up);
+    Muxw.bind("S", Muxw.motion.focus.down);
+    Muxw.bind("D", Muxw.motion.focus.right);
+    Muxw.bind("A", Muxw.motion.focus.left);
     print("LUA DONE")
 "#;
 
@@ -87,7 +87,7 @@ fn main() {
 
     here!("Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}");
 
-    let mut ray = compositor::Compositor::new().expect("err");
+    let mut muxw = compositor::Compositor::new().expect("err");
 
     println!("hello");
 }

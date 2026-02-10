@@ -518,6 +518,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "muxw"
+version = "0.1.0"
+dependencies = [
+ "arc-swap",
+ "ash",
+ "bitflags",
+ "clap",
+ "clap_complete",
+ "csscolorparser",
+ "drm",
+ "epoll",
+ "gbm",
+ "input",
+ "mlua",
+ "serde",
+ "udev",
+ "wayland-backend",
+ "wayland-protocols",
+ "wayland-server",
+ "xkbcommon",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -641,29 +664,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "21b2ebcf727b7760c461f091f9f0f539b77b8e87f2fd88131e7f1b433b3cece4"
 dependencies = [
  "proc-macro2",
-]
-
-[[package]]
-name = "ray"
-version = "0.1.0"
-dependencies = [
- "arc-swap",
- "ash",
- "bitflags",
- "clap",
- "clap_complete",
- "csscolorparser",
- "drm",
- "epoll",
- "gbm",
- "input",
- "mlua",
- "serde",
- "udev",
- "wayland-backend",
- "wayland-protocols",
- "wayland-server",
- "xkbcommon",
 ]
 
 [[package]]

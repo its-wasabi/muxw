@@ -7,7 +7,7 @@ pub fn create_input_keyboard_table(
     let input_keyboard_table = lua
         .create_table()
         .map_err(|err| crate::error::InitError::Mlua {
-            action: "create Ray.input.keyboard table",
+            action: "create Muxw.input.keyboard table",
             source: err,
         })?;
 
@@ -21,12 +21,12 @@ pub fn create_input_keyboard_table(
                 ))
             })
             .map_err(|err| crate::error::InitError::Mlua {
-                action: "create Ray.input.keyboard.get() function",
+                action: "create Muxw.input.keyboard.get() function",
                 source: err,
             })?,
         )
         .map_err(|err| crate::error::InitError::Mlua {
-            action: "set Ray.input.keyboard.get() function",
+            action: "set Muxw.input.keyboard.get() function",
             source: err,
         })?;
 

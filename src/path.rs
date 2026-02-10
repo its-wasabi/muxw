@@ -100,9 +100,9 @@ impl Path {
     fn get_config_paths_from_env()
     -> Result<Option<(std::path::PathBuf, std::path::PathBuf)>, crate::error::PathError> {
         #[allow(clippy::collapsible_if)]
-        if let Ok(ray_env) = std::env::var("RAY_CONFIG_PATH") {
-            if !ray_env.is_empty() {
-                let path = std::path::PathBuf::from(ray_env);
+        if let Ok(muxw_env) = std::env::var("MUXW_CONFIG_PATH") {
+            if !muxw_env.is_empty() {
+                let path = std::path::PathBuf::from(muxw_env);
                 let path = expand_tilde(path)?;
                 if path.is_dir() {
                     let config_dir = to_absolute(path)?;

@@ -1,13 +1,13 @@
 [package]
-name = "ray"
+name = "muxw"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.93.0"
 
 authors = ["Mikołaj Kozłowski <kozlowski.g.mikolaj@gmail.com>"]
 license-file = "LICENSE"
-repository = "https://github.com/Fasamii/ray"
-description = "Ray wayland compositor"
+repository = "https://github.com/Fasamii/muxw"
+description = "muxw wayland compositor"
 
 [profile.release]
 opt-level = 3

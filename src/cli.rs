@@ -4,7 +4,7 @@
 #[command(args_conflicts_with_subcommands = false)]
 #[command(subcommand_value_name = "SUBCOMMAND")]
 #[command(subcommand_help_heading = "Subcommands")]
-#[command(after_help = "Use \"ray [SUBCOMMAND] --help\" for more information on a subcommand")]
+#[command(after_help = "Use \"muxw [SUBCOMMAND] --help\" for more information on a subcommand")]
 pub struct Cli {
     /// Set config file or directory path
     #[arg(short, long, value_name = "PATH")]
@@ -42,7 +42,7 @@ pub enum CliSub {
         stdout: bool,
     },
 
-    /// Exit from running ray instance
+    /// Exit from running muxw instance
     Exit,
 }
 

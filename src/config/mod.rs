@@ -51,11 +51,11 @@ impl Config {
 
         lua.globals()
             .set(
-                "Ray",
+                "Muxw",
                 tables::create_global_table(&lua, std::rc::Rc::clone(&state))?,
             )
             .map_err(|err| crate::error::InitError::Mlua {
-                action: "set global Ray",
+                action: "set global muxw",
                 source: err,
             });
 
