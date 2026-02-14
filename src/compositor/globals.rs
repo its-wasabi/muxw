@@ -19,15 +19,15 @@ impl Globals {
         // The third generic is a FILTER function
         // The filter determines which clients can see this global
 
-        display_handle.create_global::<crate::compositor::Compositor, WlCompositor, _>(6, ());
+        display_handle.create_global::<crate::compositor::Muxw, WlCompositor, _>(6, ());
 
-        display_handle.create_global::<crate::compositor::Compositor, WlShm, _>(1, ());
+        display_handle.create_global::<crate::compositor::Muxw, WlShm, _>(1, ());
 
-        display_handle.create_global::<crate::compositor::Compositor, XdgWmBase, _>(5, ());
+        display_handle.create_global::<crate::compositor::Muxw, XdgWmBase, _>(5, ());
 
-        display_handle.create_global::<crate::compositor::Compositor, WlSeat, _>(9, ());
+        display_handle.create_global::<crate::compositor::Muxw, WlSeat, _>(9, ());
 
-        display_handle.create_global::<crate::compositor::Compositor, WlOutput, _>(4, ());
+        display_handle.create_global::<crate::compositor::Muxw, WlOutput, _>(4, ());
 
         Self
     }

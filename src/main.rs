@@ -28,12 +28,12 @@ fn exit_on_error<T, E: std::fmt::Display>(result: Result<T, E>, code: i32) -> T 
 
 const DEFAULT_CONFIG: &str = /* lua */
     r#"
-    print("INSIDE LUA")
-    Muxw.bind("W", Muxw.motion.focus.up);
-    Muxw.bind("S", Muxw.motion.focus.down);
-    Muxw.bind("D", Muxw.motion.focus.right);
-    Muxw.bind("A", Muxw.motion.focus.left);
-    print("LUA DONE")
+print("INSIDE LUA")
+Mux.bind("W", Mux.motion.focus.up);
+Mux.bind("S", Mux.motion.focus.down);
+Mux.bind("D", Mux.motion.focus.right);
+Mux.bind("A", Mux.motion.focus.left);
+print("LUA DONE")
 "#;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
@@ -87,7 +87,7 @@ fn main() {
 
     here!("Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}");
 
-    let mut muxw = compositor::Compositor::new().expect("err");
+    let mut muxw = compositor::Muxw::new().expect("err");
 
     println!("hello");
 }

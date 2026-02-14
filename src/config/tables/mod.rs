@@ -7,14 +7,14 @@ pub fn create_global_table(
     let global_table = lua
         .create_table()
         .map_err(|err| crate::error::InitError::Mlua {
-            action: "create global table Muxw",
+            action: "create global table Mux",
             source: err,
         })?;
 
     global_table
         .set("input", input::create_input_table(lua, state)?)
         .map_err(|err| crate::error::InitError::Mlua {
-            action: "set Muxw.input table",
+            action: "set Mux.input table",
             source: err,
         });
 

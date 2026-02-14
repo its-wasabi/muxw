@@ -5,14 +5,14 @@ use wayland_server::protocol::{
 
 mod globals;
 
-pub struct Compositor {
+pub struct Muxw {
     display: wayland_server::Display<Self>,
     globals: globals::Globals,
 
     config: crate::config::Config,
 }
 
-impl Compositor {
+impl Muxw {
     pub fn new() -> Result<Self, crate::error::InitError> {
         let display =
             wayland_server::Display::new().map_err(|err| crate::error::InitError::Wayland {
@@ -33,7 +33,7 @@ impl Compositor {
     pub fn run(&mut self) {}
 }
 
-impl wayland_server::GlobalDispatch<WlCompositor, ()> for Compositor {
+impl wayland_server::GlobalDispatch<WlCompositor, ()> for Muxw {
     fn bind(
         state: &mut Self,
         handle: &wayland_server::DisplayHandle,
@@ -46,7 +46,7 @@ impl wayland_server::GlobalDispatch<WlCompositor, ()> for Compositor {
     }
 }
 
-impl wayland_server::GlobalDispatch<WlShm, ()> for Compositor {
+impl wayland_server::GlobalDispatch<WlShm, ()> for Muxw {
     fn bind(
         state: &mut Self,
         handle: &wayland_server::DisplayHandle,
@@ -58,7 +58,7 @@ impl wayland_server::GlobalDispatch<WlShm, ()> for Compositor {
         todo!()
     }
 }
-impl wayland_server::GlobalDispatch<XdgWmBase, ()> for Compositor {
+impl wayland_server::GlobalDispatch<XdgWmBase, ()> for Muxw {
     fn bind(
         state: &mut Self,
         handle: &wayland_server::DisplayHandle,
@@ -70,7 +70,7 @@ impl wayland_server::GlobalDispatch<XdgWmBase, ()> for Compositor {
         todo!()
     }
 }
-impl wayland_server::GlobalDispatch<WlSeat, ()> for Compositor {
+impl wayland_server::GlobalDispatch<WlSeat, ()> for Muxw {
     fn bind(
         state: &mut Self,
         handle: &wayland_server::DisplayHandle,
@@ -82,7 +82,7 @@ impl wayland_server::GlobalDispatch<WlSeat, ()> for Compositor {
         todo!()
     }
 }
-impl wayland_server::GlobalDispatch<WlOutput, ()> for Compositor {
+impl wayland_server::GlobalDispatch<WlOutput, ()> for Muxw {
     fn bind(
         state: &mut Self,
         handle: &wayland_server::DisplayHandle,
