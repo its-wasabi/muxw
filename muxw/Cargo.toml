@@ -28,8 +28,6 @@ strip = "none"
 muxw-types = { path = "../muxw-types/" }
 muxw-bind-epoll = { path = "../muxw-bind-epoll/" }
 
-bitflags = "2.10.0"
-
 clap = { version = "4.5.54", features = ["derive"] }
 clap_complete = "4.5.65"
 
@@ -40,10 +38,6 @@ mlua = { version = "0.11.5", default-features = false, features = [
 	"serialize",
 ] }
 
-csscolorparser = "0.8.1"
-
-
-epoll = { git = "https://github.com/Fasamii/epoll.git" }
 udev = "0.9.3"
 input = "0.9.1"
 xkbcommon = "0.9.0"
