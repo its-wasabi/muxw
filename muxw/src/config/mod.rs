@@ -2,35 +2,7 @@ mod tables;
 
 pub struct Config {
     lua: mlua::Lua,
-    state: std::rc::Rc<ConfigState>,
-}
-
-pub struct ConfigState {
-    builder: std::rc::Rc<std::cell::RefCell<ConfigBuilder>>,
-    snapshot: arc_swap::ArcSwap<ConfigSnapshot>,
-}
-
-#[derive(Debug)]
-pub struct ConfigBuilder {
-    keyboards: std::collections::HashMap<
-        tables::input::keyboard::KeyboardCriteria,
-        tables::input::keyboard::KeyboardConfig,
-    >,
-    mices: Vec<()>,
-}
-
-pub struct ConfigSnapshot {
-    pub keyboards: std::sync::Arc<
-        std::collections::HashMap<
-            tables::input::keyboard::KeyboardCriteria,
-            tables::input::keyboard::KeyboardConfig,
-        >,
-    >,
-    pub mices: std::sync::Arc<Vec<()>>,
-}
-
-pub trait Publishable {
-    fn apply(&self, state: &ConfigState);
+    shared: SharedConfig,
 }
 
 impl Config {
@@ -47,7 +19,9 @@ impl Config {
                 source: err,
             })?;
 
-        let state = std::rc::Rc::new(ConfigState::new());
+        let share = SharedConfig {
+            keyboards: crate::utils::types::config_cell::ConfigSection::new(),
+        };
 
         lua.globals()
             .set(
@@ -92,43 +66,19 @@ impl Config {
     }
 }
 
-impl ConfigState {
+pub struct SharedConfig {
+    pub keyboards: crate::utils::types::config_cell::ConfigSection<
+        std::collections::HashMap<
+            tables::input::keyboard::KeyboardCriteria,
+            tables::input::keyboard::KeyboardConfig,
+        >,
+    >,
+}
+
+impl SharedConfig {
     fn new() -> Self {
-        let builder = std::rc::Rc::new(std::cell::RefCell::new(ConfigBuilder {
-            keyboards: std::collections::HashMap::with_capacity(2),
-            mices: Vec::with_capacity(2),
-        }));
-
-        let snapshot = ConfigSnapshot {
-            keyboards: std::sync::Arc::new(std::collections::HashMap::with_capacity(2)),
-            mices: std::sync::Arc::new(Vec::with_capacity(2)),
-        };
-
         Self {
-            builder,
-            snapshot: arc_swap::ArcSwap::from_pointee(snapshot),
+            keyboards: crate::utils::types::config_cell::ConfigSection::new(),
         }
-    }
-
-    pub fn snapshot(&self) -> std::sync::Arc<ConfigSnapshot> {
-        self.snapshot.load_full()
-    }
-
-    fn with_builder<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&mut ConfigBuilder) -> R,
-    {
-        let mut builder = self.builder.borrow_mut();
-        f(&mut builder)
-    }
-
-    fn publish(&self) {
-        let builder = self.builder.borrow();
-        let snapshot = ConfigSnapshot {
-            keyboards: std::sync::Arc::new(builder.keyboards.clone()),
-            mices: std::sync::Arc::new(builder.mices.clone()),
-        };
-
-        self.snapshot.store(std::sync::Arc::new(snapshot));
     }
 }

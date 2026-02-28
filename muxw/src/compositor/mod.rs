@@ -33,6 +33,10 @@ impl Muxw {
     pub fn run(&mut self) {}
 }
 
+struct Ex {
+    opt1: bool,
+}
+
 impl wayland_server::GlobalDispatch<WlCompositor, ()> for Muxw {
     fn bind(
         state: &mut Self,
