@@ -26,6 +26,7 @@ strip = "none"
 
 [dependencies]
 muxw-types = { path = "../muxw-types/" }
+muxw-bind-epoll = { path = "../muxw-bind-epoll/" }
 
 bitflags = "2.10.0"
 

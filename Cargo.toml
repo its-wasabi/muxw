@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
 members = [
-	"muxw", "muxw-types",
+	"muxw", "muxw-bind-epoll", "muxw-types",
 ]
 

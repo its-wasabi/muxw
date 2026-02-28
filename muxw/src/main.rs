@@ -64,8 +64,8 @@ const fn parse_version(version: &str) -> (u32, u32, u32) {
 }
 const VERSION: (u32, u32, u32) = parse_version(env!("CARGO_PKG_VERSION"));
 
-static CLI: muxw_types::Global<cli::Cli> = utils::types::global::Global::new();
-static PATH: muxw_types::Global<path::Path> = utils::types::global::Global::new();
+static CLI: muxw_types::Global<cli::Cli> = muxw_types::Global::new();
+static PATH: muxw_types::Global<path::Path> = muxw_types::Global::new();
 
 mod cli;
 mod compositor;

@@ -527,6 +527,7 @@ dependencies = [
  "gbm",
  "input",
  "mlua",
+ "muxw-bind-epoll",
  "muxw-types",
  "serde",
  "udev",
@@ -534,6 +535,14 @@ dependencies = [
  "wayland-protocols",
  "wayland-server",
  "xkbcommon",
+]
+
+[[package]]
+name = "muxw-bind-epoll"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "libc",
 ]
 
 [[package]]
