@@ -9,7 +9,7 @@ pub struct Muxw {
     display: wayland_server::Display<Self>,
     globals: globals::Globals,
 
-    config: crate::config::Config,
+    config: crate::config::ConfigContext,
 }
 
 impl Muxw {
@@ -21,7 +21,7 @@ impl Muxw {
             })?;
         let globals = globals::Globals::new(&display.handle());
 
-        let config = crate::config::Config::new(&crate::PATH.get().config_file)?;
+        let config = crate::config::ConfigContext::new(&crate::PATH.get().config_file)?;
 
         Ok(Self {
             display,

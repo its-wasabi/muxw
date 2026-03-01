@@ -72,7 +72,6 @@ mod compositor;
 mod config;
 mod error;
 mod path;
-mod utils;
 
 fn main() {
     use clap::Parser;
@@ -88,6 +87,4 @@ fn main() {
     here!("Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}");
 
     let mut muxw = compositor::Muxw::new().expect("err");
-
-    println!("hello");
 }

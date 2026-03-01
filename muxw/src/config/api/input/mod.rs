@@ -1,9 +1,6 @@
 pub mod keyboard;
 
-pub fn create_input_table(
-    lua: &mlua::Lua,
-    state: std::rc::Rc<crate::config::ConfigState>,
-) -> Result<mlua::Table, crate::error::InitError> {
+pub fn create_input_table(lua: &mlua::Lua) -> Result<mlua::Table, crate::error::InitError> {
     let input_table = lua
         .create_table()
         .map_err(|err| crate::error::InitError::Mlua {
@@ -12,10 +9,7 @@ pub fn create_input_table(
         })?;
 
     input_table
-        .set(
-            "keyboard",
-            keyboard::create_input_keyboard_table(lua, state)?,
-        )
+        .set("keyboard", keyboard::create_input_keyboard_table(lua)?)
         .map_err(|err| crate::error::InitError::Mlua {
             action: "set Mux.input.keyboard table",
             source: err,

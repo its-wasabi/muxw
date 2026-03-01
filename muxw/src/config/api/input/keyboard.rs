@@ -1,8 +1,14 @@
 use mlua::LuaSerdeExt;
 
+fn table_to_comma_string(table: &mlua::Table) -> mlua::Result<String> {
+    let items: Vec<String> = table
+        .sequence_values()
+        .collect::<Result<Vec<String>, _>>()?;
+    Ok(items.join(","))
+}
+
 pub fn create_input_keyboard_table(
     lua: &mlua::Lua,
-    state: std::rc::Rc<crate::config::ConfigState>,
 ) -> Result<mlua::Table, crate::error::InitError> {
     let input_keyboard_table = lua
         .create_table()
@@ -15,10 +21,7 @@ pub fn create_input_keyboard_table(
         .set(
             "get",
             lua.create_function(move |_, criteria: KeyboardCriteria| {
-                Ok(KeyboardConfigBuilder::new(
-                    criteria,
-                    std::rc::Rc::clone(&state),
-                ))
+                Ok(KeyboardConfigBuilder::new(criteria))
             })
             .map_err(|err| crate::error::InitError::Mlua {
                 action: "create Mux.input.keyboard.get() function",
@@ -33,13 +36,6 @@ pub fn create_input_keyboard_table(
     Ok(input_keyboard_table)
 }
 
-fn table_to_comma_string(table: &mlua::Table) -> mlua::Result<String> {
-    let items: Vec<String> = table
-        .sequence_values()
-        .collect::<Result<Vec<String>, _>>()?;
-    Ok(items.join(","))
-}
-
 #[derive(Debug, Clone)]
 pub struct KeyboardConfig {
     pub layout: KeyboardLayout,
@@ -51,8 +47,6 @@ pub struct KeyboardConfigBuilder {
     criteria: KeyboardCriteria,
     layout: KeyboardLayout,
     options: KeyboardOptions,
-
-    state: std::rc::Rc<crate::config::ConfigState>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize, Hash)]
@@ -69,36 +63,21 @@ pub struct KeyboardLayout(pub Option<String>);
 pub struct KeyboardOptions(pub Option<String>);
 
 impl KeyboardConfigBuilder {
-    fn new(criteria: KeyboardCriteria, state: std::rc::Rc<crate::config::ConfigState>) -> Self {
+    const fn new(criteria: KeyboardCriteria) -> Self {
         Self {
             criteria,
             layout: KeyboardLayout(None),
             options: KeyboardOptions(None),
-            state,
         }
     }
 }
 
-impl crate::config::Publishable for KeyboardConfigBuilder {
-    fn apply(&self, state: &crate::config::ConfigState) {
-        here!(
-            "CONFIG: Apply {:?} options: {:?}, layout: {:?}",
-            self.criteria,
-            self.options,
-            self.layout
-        );
-
-        state.with_builder(|builder| {
-            builder.keyboards.insert(
-                self.criteria.clone(),
-                KeyboardConfig {
-                    layout: self.layout.clone(),
-                    options: self.options.clone(),
-                },
-            );
-        });
-
-        state.publish();
+impl From<KeyboardConfigBuilder> for KeyboardConfig {
+    fn from(value: KeyboardConfigBuilder) -> Self {
+        Self {
+            layout: value.layout,
+            options: value.options,
+        }
     }
 }
 
@@ -111,11 +90,10 @@ impl KeyboardCriteria {
         }
     }
 
-    pub fn is_wildcard(&self) -> bool {
+    pub const fn is_wildcard(&self) -> bool {
         self.name.is_none() && self.port.is_none() && self.seat.is_none()
     }
 
-    // TODO: Make that foo exit early if doesn't match
     pub fn matches(
         &self,
         kb_name: Option<&str>,
@@ -149,18 +127,18 @@ impl mlua::UserData for KeyboardConfigBuilder {
     fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method_mut("layout", |_, this, layout: KeyboardLayout| {
             this.layout = layout;
-            Ok(())
+            Ok(this.clone())
         });
 
         methods.add_method_mut("options", |_, this, options: KeyboardOptions| {
             this.options = options;
-            Ok(())
+            Ok(this.clone())
         });
 
         methods.add_method("apply", |_, this, ()| {
-            use crate::config::Publishable;
-            this.apply(&this.state);
-
+            crate::config::CONFIG
+                .keyboard
+                .insert(this.criteria.clone(), KeyboardConfig::from(this.clone()));
             Ok(())
         });
     }
@@ -169,7 +147,7 @@ impl mlua::UserData for KeyboardConfigBuilder {
 impl mlua::FromLua for KeyboardCriteria {
     fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
         match value {
-            mlua::Value::Nil => Ok(KeyboardCriteria {
+            mlua::Value::Nil => Ok(Self {
                 name: None,
                 port: None,
                 seat: None,
@@ -182,9 +160,9 @@ impl mlua::FromLua for KeyboardCriteria {
 impl mlua::FromLua for KeyboardLayout {
     fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
         match value {
-            mlua::Value::String(string) => Ok(KeyboardLayout(Some(string.to_str()?.to_string()))),
-            mlua::Value::Table(table) => Ok(KeyboardLayout(Some(table_to_comma_string(&table)?))),
-            mlua::Value::Nil => Ok(KeyboardLayout(None)),
+            mlua::Value::String(string) => Ok(Self(Some(string.to_str()?.to_string()))),
+            mlua::Value::Table(table) => Ok(Self(Some(table_to_comma_string(&table)?))),
+            mlua::Value::Nil => Ok(Self(None)),
             _ => Err(mlua::Error::FromLuaConversionError {
                 from: value.type_name(),
                 to: String::from("Keyboard Layout"),
@@ -197,9 +175,9 @@ impl mlua::FromLua for KeyboardLayout {
 impl mlua::FromLua for KeyboardOptions {
     fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
         match value {
-            mlua::Value::String(string) => Ok(KeyboardOptions(Some(string.to_str()?.to_string()))),
-            mlua::Value::Table(table) => Ok(KeyboardOptions(Some(table_to_comma_string(&table)?))),
-            mlua::Value::Nil => Ok(KeyboardOptions(None)),
+            mlua::Value::String(string) => Ok(Self(Some(string.to_str()?.to_string()))),
+            mlua::Value::Table(table) => Ok(Self(Some(table_to_comma_string(&table)?))),
+            mlua::Value::Nil => Ok(Self(None)),
             _ => Err(mlua::Error::FromLuaConversionError {
                 from: value.type_name(),
                 to: String::from("Keyboard Options"),

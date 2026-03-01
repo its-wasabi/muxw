@@ -1,12 +1,17 @@
-mod tables;
+use std::collections::HashMap;
 
-pub struct Config {
+mod api;
+
+pub static CONFIG: muxw_types::Global<Config> = muxw_types::Global::new();
+
+pub struct ConfigContext {
     lua: mlua::Lua,
-    shared: SharedConfig,
 }
 
-impl Config {
+impl ConfigContext {
     pub fn new(path: &std::path::Path) -> Result<Self, crate::error::InitError> {
+        CONFIG.init(Config::default());
+
         let libs = mlua::StdLib::TABLE
             | mlua::StdLib::MATH
             | mlua::StdLib::STRING
@@ -19,31 +24,28 @@ impl Config {
                 source: err,
             })?;
 
-        let share = SharedConfig {
-            keyboards: crate::utils::types::config_cell::ConfigSection::new(),
-        };
-
+        let mux_table = api::create_global_table(&lua)?;
         lua.globals()
-            .set(
-                "Mux",
-                tables::create_global_table(&lua, std::rc::Rc::clone(&state))?,
-            )
+            .set("Mux", mux_table)
             .map_err(|err| crate::error::InitError::Mlua {
-                action: "set global Mux",
+                action: "set Mux table",
                 source: err,
             });
 
-        let config_source = Self::read_config_source(path).unwrap(); // TODO: .map_err(|err|)?;
-        lua.load(config_source)
-            .exec()
-            .map_err(|err| crate::error::InitError::Mlua {
-                action: "load & exec config",
+        let config_source =
+            Self::read_config_source(path).map_err(|err| crate::error::InitError::Io {
+                action: "read config file",
+                path: Some(path.into()),
                 source: err,
             })?;
+        #[allow(clippy::expect_used)]
+        lua.load(config_source)
+            .exec()
+            .expect("Handle errors diferently for running code");
 
-        here!("CONFIG STATE BUILDER: {:#?}", state.builder);
+        here!("Config: {CONFIG:#?}");
 
-        Ok(Self { lua, state })
+        Ok(Self { lua })
     }
 
     fn read_config_source(path: &std::path::Path) -> std::io::Result<String> {
@@ -66,19 +68,9 @@ impl Config {
     }
 }
 
-pub struct SharedConfig {
-    pub keyboards: crate::utils::types::config_cell::ConfigSection<
-        std::collections::HashMap<
-            tables::input::keyboard::KeyboardCriteria,
-            tables::input::keyboard::KeyboardConfig,
-        >,
+#[derive(Debug, Default)]
+pub struct Config {
+    keyboard: muxw_types::ConfigField<
+        HashMap<api::input::keyboard::KeyboardCriteria, api::input::keyboard::KeyboardConfig>,
     >,
-}
-
-impl SharedConfig {
-    fn new() -> Self {
-        Self {
-            keyboards: crate::utils::types::config_cell::ConfigSection::new(),
-        }
-    }
 }

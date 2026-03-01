@@ -16,14 +16,14 @@ pub enum CliError {
 impl std::fmt::Display for CliError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CliError::ShellNotSupported { shell } => write!(f, "{shell} is not supported"),
-            CliError::ShellNotDetected => write!(f, "Could not detect the current shell"),
-            CliError::PermissionDenied { path } => write!(
+            Self::ShellNotSupported { shell } => write!(f, "{shell} is not supported"),
+            Self::ShellNotDetected => write!(f, "Could not detect the current shell"),
+            Self::PermissionDenied { path } => write!(
                 f,
                 "Permission denied while writing \"{}\". Try running as root.",
                 path.display()
             ),
-            CliError::Io { action, source } => write!(f, "Failed to {action}: {source}"),
+            Self::Io { action, source } => write!(f, "Failed to {action}: {source}"),
         }
     }
 }
@@ -31,7 +31,7 @@ impl std::fmt::Display for CliError {
 impl std::error::Error for CliError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            CliError::Io { action, source } => Some(source),
+            Self::Io { action, source } => Some(source),
             _ => None,
         }
     }
@@ -60,17 +60,17 @@ pub enum PathError {
 impl std::fmt::Display for PathError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PathError::InvalidPath { input, reason } => {
+            Self::InvalidPath { input, reason } => {
                 write!(f, "Invalid path \"{}\": {reason}", input.display())
             }
-            PathError::ConfigNotFound { origin, path } => {
+            Self::ConfigNotFound { origin, path } => {
                 write!(
                     f,
                     "Config not found  (from {origin}) at \"{}\"",
                     path.display()
                 )
             }
-            PathError::Io {
+            Self::Io {
                 action,
                 path,
                 source,
@@ -88,7 +88,7 @@ impl std::fmt::Display for PathError {
 impl std::error::Error for PathError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            PathError::Io {
+            Self::Io {
                 action,
                 path,
                 source,
@@ -104,20 +104,36 @@ pub enum InitError {
         action: &'static str,
         source: wayland_server::backend::InitError,
     },
-    // TODO: Create sub error enum that is specific for lua tables
     Mlua {
         action: &'static str,
         source: mlua::Error,
+    },
+
+    Io {
+        action: &'static str,
+        path: Option<std::path::PathBuf>,
+        source: std::io::Error,
     },
 }
 
 impl std::fmt::Display for InitError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InitError::Wayland { action, source } => {
+            Self::Wayland { action, source } => {
                 write!(f, "Failed to {action}: {source}")
             }
-            InitError::Mlua { action, source } => write!(f, "Failed to {action}: {source}"),
+            Self::Mlua { action, source } => write!(f, "Failed to {action}: {source}"),
+            Self::Io {
+                action,
+                path,
+                source,
+            } => {
+                if let Some(path) = path {
+                    write!(f, "Failed to {action} \"{}\": {source}", path.display())
+                } else {
+                    write!(f, "Failed to {action}: {source}")
+                }
+            }
         }
     }
 }
@@ -125,8 +141,13 @@ impl std::fmt::Display for InitError {
 impl std::error::Error for InitError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            InitError::Wayland { action, source } => Some(source),
-            InitError::Mlua { action, source } => Some(source),
+            Self::Wayland { action, source } => Some(source),
+            Self::Mlua { action, source } => Some(source),
+            Self::Io {
+                action,
+                path,
+                source,
+            } => Some(source),
         }
     }
 }
