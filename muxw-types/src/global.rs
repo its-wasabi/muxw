@@ -87,15 +87,14 @@ impl<T: core::fmt::Debug> core::fmt::Debug for Global<T> {
         #[cfg(not(debug_assertions))]
         let initialized = true;
 
-        write!(
-            f,
-            "Global({})",
-            if initialized {
-                let val = unsafe { &*(*self.value.get()).as_ptr() };
-                format!("{:?}", val)
-            } else {
-                "<uninitialized>".to_string()
-            }
-        )
+        if initialized {
+            // SAFETY: we just checked initialized == true
+            let val = unsafe { &*(*self.value.get()).as_ptr() };
+            f.debug_tuple("Global")
+                .field(val) // <-- passes f's context (alternate, indent) down
+                .finish()
+        } else {
+            f.debug_tuple("Global").field(&"<uninitialized>").finish()
+        }
     }
 }
