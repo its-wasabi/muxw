@@ -10,8 +10,6 @@ pub struct ConfigContext {
 
 impl ConfigContext {
     pub fn new(path: &std::path::Path) -> Result<Self, crate::error::InitError> {
-        CONFIG.init(Config::default());
-
         let libs = mlua::StdLib::TABLE
             | mlua::StdLib::MATH
             | mlua::StdLib::STRING

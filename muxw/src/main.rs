@@ -1,4 +1,5 @@
 #![allow(unused)]
+
 macro_rules! here {
     () => {
         #[cfg(debug_assertions)]
@@ -83,6 +84,7 @@ fn main() {
     let path = exit_on_error(path::Path::new(&cli), 1);
     CLI.init(cli);
     PATH.init(path);
+    config::CONFIG.init(config::Config::default());
 
     here!("Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}");
 
