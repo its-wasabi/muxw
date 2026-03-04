@@ -1,5 +1,7 @@
 use mlua::LuaSerdeExt;
 
+use crate::config;
+
 fn table_to_comma_string(table: &mlua::Table) -> mlua::Result<String> {
     let items: Vec<String> = table
         .sequence_values()
@@ -20,7 +22,7 @@ pub fn create_input_keyboard_table(
     input_keyboard_table
         .set(
             "get",
-            lua.create_function(move |_, criteria: KeyboardCriteria| {
+            lua.create_function(|_, criteria: KeyboardCriteria| {
                 Ok(KeyboardConfigBuilder::new(criteria))
             })
             .map_err(|err| crate::error::InitError::Mlua {
@@ -36,19 +38,6 @@ pub fn create_input_keyboard_table(
     Ok(input_keyboard_table)
 }
 
-#[derive(Debug, Clone)]
-pub struct KeyboardConfig {
-    pub layout: KeyboardLayout,
-    pub options: KeyboardOptions,
-}
-
-#[derive(Clone)]
-pub struct KeyboardConfigBuilder {
-    criteria: KeyboardCriteria,
-    layout: KeyboardLayout,
-    options: KeyboardOptions,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize, Hash)]
 pub struct KeyboardCriteria {
     pub name: Option<String>,
@@ -57,10 +46,23 @@ pub struct KeyboardCriteria {
 }
 
 #[derive(Debug, Clone)]
+pub struct KeyboardConfig {
+    pub layout: KeyboardLayout,
+    pub options: KeyboardOptions,
+}
+
+#[derive(Debug, Clone)]
 pub struct KeyboardLayout(pub Option<String>);
 
 #[derive(Debug, Clone)]
 pub struct KeyboardOptions(pub Option<String>);
+
+#[derive(Clone)]
+pub struct KeyboardConfigBuilder {
+    criteria: KeyboardCriteria,
+    layout: KeyboardLayout,
+    options: KeyboardOptions,
+}
 
 impl KeyboardConfigBuilder {
     const fn new(criteria: KeyboardCriteria) -> Self {
@@ -72,12 +74,44 @@ impl KeyboardConfigBuilder {
     }
 }
 
-impl From<KeyboardConfigBuilder> for KeyboardConfig {
-    fn from(value: KeyboardConfigBuilder) -> Self {
-        Self {
-            layout: value.layout,
-            options: value.options,
-        }
+impl mlua::UserData for KeyboardConfigBuilder {
+    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
+        // kb:layout("us") or kb:layout({"us","pl"}) or kb:layout("us,pl")
+        // Returns nothing modifies the object on which it is called
+        // TODO: Returns self so calls can be chained: kb:layout("us"):options("...") and can modify
+        // the object on which it is called its user preference how to use that
+        methods.add_method_mut("layout", |_, this, layout: KeyboardLayout| {
+            this.layout = layout;
+
+            // We can't return `this` directly (we only have &mut Self),
+            // so chaining works by the caller reusing the same variable.
+            // If you want true method chaining return Ok(AnyUserData) —
+            // but that requires cloning. For a config API called once at
+            // startup the simplest and cleanest form is just Ok(()).
+            Ok(())
+        });
+
+        methods.add_method_mut("options", |_, this, options: KeyboardOptions| {
+            this.options = options;
+
+            Ok(this.clone())
+        });
+
+        methods.add_method("apply", |lua, this, ()| {
+            let mut config = lua
+                .app_data_mut::<crate::config::Config>()
+                .ok_or(mlua::Error::runtime("Config not initialized"))?;
+
+            config.keyboard_xkb.insert(
+                this.criteria.clone(),
+                KeyboardConfig {
+                    layout: this.layout.clone(),
+                    options: this.options.clone(),
+                },
+            );
+
+            Ok(())
+        });
     }
 }
 
@@ -94,53 +128,24 @@ impl KeyboardCriteria {
         self.name.is_none() && self.port.is_none() && self.seat.is_none()
     }
 
-    pub fn matches(
-        &self,
-        kb_name: Option<&str>,
-        kb_port: Option<&str>,
-        kb_seat: Option<&str>,
-    ) -> bool {
-        #[allow(clippy::collapsible_if)]
-        if let Some(name) = &self.name {
-            if Some(name.as_ref()) != kb_name {
+    pub fn matches(&self, name: Option<&str>, port: Option<&str>, seat: Option<&str>) -> bool {
+        if let Some(n) = &self.name {
+            if Some(n.as_str()) != name {
                 return false;
             }
         }
-        #[allow(clippy::collapsible_if)]
-        if let Some(port) = &self.port {
-            if Some(port.as_ref()) != kb_port {
+        if let Some(p) = &self.port {
+            if Some(p.as_str()) != port {
                 return false;
             }
         }
-        #[allow(clippy::collapsible_if)]
-        if let Some(seat) = &self.seat {
-            if Some(seat.as_ref()) != kb_seat {
+        if let Some(s) = &self.seat {
+            if Some(s.as_str()) != seat {
                 return false;
             }
         }
 
         true
-    }
-}
-
-impl mlua::UserData for KeyboardConfigBuilder {
-    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method_mut("layout", |_, this, layout: KeyboardLayout| {
-            this.layout = layout;
-            Ok(this.clone())
-        });
-
-        methods.add_method_mut("options", |_, this, options: KeyboardOptions| {
-            this.options = options;
-            Ok(this.clone())
-        });
-
-        methods.add_method("apply", |_, this, ()| {
-            crate::config::CONFIG
-                .keyboard
-                .insert(this.criteria.clone(), KeyboardConfig::from(this.clone()));
-            Ok(())
-        });
     }
 }
 

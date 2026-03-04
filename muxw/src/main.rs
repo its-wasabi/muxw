@@ -72,6 +72,7 @@ mod cli;
 mod compositor;
 mod config;
 mod error;
+mod input;
 mod path;
 
 fn main() {
@@ -84,9 +85,12 @@ fn main() {
     let path = exit_on_error(path::Path::new(&cli), 1);
     CLI.init(cli);
     PATH.init(path);
-    config::CONFIG.init(config::Config::default());
 
-    here!("Cli & Path cfg passed - CLI: {CLI:?}, PATH: {PATH:?}");
+    #[cfg(debug_assertions)]
+    {
+        here!("{CLI:#?}");
+        here!("{PATH:#?}");
+    }
 
     let mut muxw = compositor::Muxw::new().expect("err");
 }
