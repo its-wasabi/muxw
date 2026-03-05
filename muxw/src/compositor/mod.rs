@@ -17,17 +17,11 @@ impl Muxw {
         {
             here!("First config state: {:#?}", config.load());
 
-            std::thread::sleep(std::time::Duration::from_secs(8));
-            let request_handle = config_handle.reload(None).unwrap();
-            {
-                // Do some stuff
-            }
+            config_handle.reset().unwrap().wait();
+            here!("After reset: {:#?}", config.load());
 
-            request_handle.wait().unwrap();
-            {
-                // Do some stuff requiring reloaded config
-                here!("First config state: {:#?}", config.load());
-            }
+            config_handle.reload(None).unwrap().wait();
+            here!("After reload: {:#?}", config.load());
         }
 
         // let globals = globals::Globals::new(&display.handle());
