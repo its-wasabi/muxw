@@ -1,18 +1,17 @@
 mod api;
 
 fn mutate_config(lua: &mlua::Lua, f: impl FnOnce(&mut Config)) -> mlua::Result<()> {
-    let mut rc = lua
-        .app_data_mut::<std::rc::Rc<Config>>()
-        .ok_or(mlua::Error::runtime("Config user data not initialized"))?;
-    f(std::rc::Rc::make_mut(&mut *rc));
-    let shared = lua
-        .app_data_ref::<SharedConfig>()
-        .ok_or(mlua::Error::runtime(
-            "Shared config user  data not initialized",
-        ))?;
-
-    shared.store(std::sync::Arc::new((**rc).clone()));
+    lua.app_data_mut::<ConfigState>()
+        .ok_or_else(|| mlua::Error::runtime("Config user data not initialized"))?
+        .mutate(f);
     Ok(())
+}
+
+pub struct ConfigContext {
+    lua: mlua::Lua,
+    path: std::path::PathBuf,
+    shared: SharedConfig,
+    event_rx: std::sync::mpsc::Receiver<ConfigEvent>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -23,11 +22,12 @@ pub struct Config {
     >,
 }
 
-pub enum ConfigEvent {
-    Reload {
-        path: Option<std::path::PathBuf>,
-        done: std::sync::mpsc::Sender<Result<(), crate::error::InitError>>,
-    },
+#[derive(Debug, Clone)]
+pub struct SharedConfig(std::sync::Arc<arc_swap::ArcSwap<Config>>);
+
+struct ConfigState {
+    local: std::rc::Rc<Config>,
+    shared: SharedConfig,
 }
 
 #[derive(Debug)]
@@ -36,14 +36,31 @@ pub struct ConfigHandle(std::sync::mpsc::Sender<ConfigEvent>);
 #[derive(Debug)]
 pub struct PendingConfigRequest(std::sync::mpsc::Receiver<Result<(), crate::error::InitError>>);
 
-#[derive(Debug, Clone)]
-pub struct SharedConfig(std::sync::Arc<arc_swap::ArcSwap<Config>>);
+pub enum ConfigEvent {
+    Reload {
+        path: Option<std::path::PathBuf>,
+        done: std::sync::mpsc::Sender<Result<(), crate::error::InitError>>,
+    },
+}
 
-pub struct ConfigContext {
-    lua: mlua::Lua,
-    path: std::path::PathBuf,
-    shared: SharedConfig,
-    event_rx: std::sync::mpsc::Receiver<ConfigEvent>,
+impl ConfigState {
+    fn new(shared: SharedConfig) -> Self {
+        Self {
+            local: std::rc::Rc::new(Config::default()),
+            shared,
+        }
+    }
+
+    fn mutate(&mut self, f: impl FnOnce(&mut Config)) {
+        f(std::rc::Rc::make_mut(&mut self.local));
+        self.shared
+            .store(std::sync::Arc::new((*self.local).clone()));
+    }
+
+    fn reset(&mut self) {
+        self.local = std::rc::Rc::new(Config::default());
+        self.shared.store(std::sync::Arc::new(Config::default()));
+    }
 }
 
 impl ConfigHandle {
@@ -162,8 +179,7 @@ impl ConfigContext {
         let lua = mlua::Lua::new_with(libs, options)
             .map_err(|err| crate::error::InitError::Mlua { action: "init lua" })?;
 
-        lua.set_app_data(std::rc::Rc::new(Config::default()));
-        lua.set_app_data(shared.clone());
+        lua.set_app_data(ConfigState::new(shared.clone()));
 
         let mux_table = api::create_global_table(&lua)?;
         lua.globals()
@@ -194,7 +210,7 @@ impl ConfigContext {
                     }
 
                     // NOTE: You don't need to handle error here cause it is send to the caller
-                    done.send(self.exec_config_file());
+                    done.send(self.exec_config_file()).unwrap();
                 }
             }
         }
@@ -202,8 +218,8 @@ impl ConfigContext {
 
     #[must_use = "You should handle error variant of the Result"]
     fn exec_config_file(&self) -> Result<(), crate::error::InitError> {
-        if let Some(mut rc) = self.lua.app_data_mut::<std::rc::Rc<Config>>() {
-            *rc = std::rc::Rc::new(Config::default());
+        if let Some(mut state) = self.lua.app_data_mut::<ConfigState>() {
+            state.reset();
         }
 
         let source =
@@ -222,10 +238,7 @@ impl ConfigContext {
 
         Ok(())
     }
-}
 
-// File managing of ConfigContext
-impl ConfigContext {
     fn read_config_source(path: &std::path::Path) -> std::io::Result<String> {
         match std::fs::read_to_string(path) {
             Ok(source) => Ok(source),

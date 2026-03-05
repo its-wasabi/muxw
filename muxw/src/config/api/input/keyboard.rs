@@ -1,7 +1,5 @@
 use mlua::LuaSerdeExt;
 
-use crate::config;
-
 fn table_to_comma_string(table: &mlua::Table) -> mlua::Result<String> {
     let items: Vec<String> = table
         .sequence_values()

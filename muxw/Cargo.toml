@@ -33,7 +33,6 @@ clap_complete = "4.5.65"
 
 serde = { version = "1.0.228", features = ["derive"] }
 mlua = { version = "0.11.5", default-features = false, features = [
-	# "send",
 	"luajit52",
 	"vendored",
 	"serialize",

@@ -15,8 +15,6 @@ impl Muxw {
 
         #[cfg(debug_assertions)]
         {
-            use core::time;
-
             here!("First config state: {:#?}", config.load());
 
             std::thread::sleep(std::time::Duration::from_secs(8));
