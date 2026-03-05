@@ -20,7 +20,10 @@ pub enum ConfigEvent {
 }
 
 #[derive(Debug)]
-pub struct ConfigHandle(pub std::sync::mpsc::Sender<ConfigEvent>);
+pub struct ConfigHandle(std::sync::mpsc::Sender<ConfigEvent>);
+
+#[derive(Debug)]
+pub struct PendingConfigRequest(std::sync::mpsc::Receiver<Result<(), crate::error::InitError>>);
 
 #[derive(Debug, Clone)]
 pub struct SharedConfig(std::sync::Arc<arc_swap::ArcSwap<Config>>);
@@ -33,16 +36,38 @@ pub struct ConfigContext {
 }
 
 impl ConfigHandle {
-    pub fn reload(&self, path: Option<std::path::PathBuf>) -> Result<(), crate::error::InitError> {
+    fn dispatch(
+        &self,
+        make_event: impl FnOnce(
+            std::sync::mpsc::Sender<Result<(), crate::error::InitError>>,
+        ) -> ConfigEvent,
+    ) -> Result<PendingConfigRequest, crate::error::InitError> {
         let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let event = make_event(done_tx);
         self.0
-            .send(ConfigEvent::Reload {
-                path,
-                done: done_tx,
-            })
-            .unwrap();
-        done_rx.recv().map_err(|_| crate::error::InitError::Io {
-            action: "config thread died",
+            .send(event)
+            .map_err(|err| crate::error::InitError::Io {
+                action: "send config event",
+                path: None,
+                source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
+            })?;
+        Ok(PendingConfigRequest(done_rx))
+    }
+}
+
+impl ConfigHandle {
+    pub fn reload(
+        &self,
+        path: Option<std::path::PathBuf>,
+    ) -> Result<PendingConfigRequest, crate::error::InitError> {
+        self.dispatch(|done| ConfigEvent::Reload { path, done })
+    }
+}
+
+impl PendingConfigRequest {
+    pub fn wait(self) -> Result<(), crate::error::InitError> {
+        self.0.recv().map_err(|err| crate::error::InitError::Io {
+            action: "config thread died before completion operation",
             path: None,
             source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
         })??;
@@ -145,6 +170,9 @@ impl ConfigContext {
             shared,
             event_rx,
         };
+
+        let path = &config_context.path;
+        Self::exec_config_file(&config_context, path);
 
         Ok(config_context)
     }

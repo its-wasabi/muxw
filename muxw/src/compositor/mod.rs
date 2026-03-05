@@ -15,11 +15,11 @@ impl Muxw {
 
         #[cfg(debug_assertions)]
         {
-            here!("{:#?}", config.load());
+            here!("First config state: {:#?}", config.load());
 
-            config_handle.reload(None);
-
-            here!("{:#?}", config.load());
+            std::thread::sleep(std::time::Duration::from_secs(8));
+            config_handle.reload(None).unwrap().wait();
+            here!("First config state: {:#?}", config.load());
         }
         // let globals = globals::Globals::new(&display.handle());
         // let mut ev = muxw_event_loop::event_loop::EventLoop::new().unwrap();
