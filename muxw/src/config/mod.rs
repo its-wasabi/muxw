@@ -1,10 +1,21 @@
-use std::error::Error;
-
-use muxw_event_loop::sources::EventSource;
-
 mod api;
 
-#[derive(Debug, Default)]
+fn mutate_config(lua: &mlua::Lua, f: impl FnOnce(&mut Config)) -> mlua::Result<()> {
+    let mut rc = lua
+        .app_data_mut::<std::rc::Rc<Config>>()
+        .ok_or(mlua::Error::runtime("Config user data not initialized"))?;
+    f(std::rc::Rc::make_mut(&mut *rc));
+    let shared = lua
+        .app_data_ref::<SharedConfig>()
+        .ok_or(mlua::Error::runtime(
+            "Shared config user  data not initialized",
+        ))?;
+
+    shared.store(std::sync::Arc::new((**rc).clone()));
+    Ok(())
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct Config {
     pub keyboard_xkb: std::collections::HashMap<
         api::input::keyboard::KeyboardCriteria,
@@ -65,6 +76,7 @@ impl ConfigHandle {
 }
 
 impl PendingConfigRequest {
+    #[must_use = "May return important error"]
     pub fn wait(self) -> Result<(), crate::error::InitError> {
         self.0.recv().map_err(|err| crate::error::InitError::Io {
             action: "config thread died before completion operation",
@@ -82,12 +94,10 @@ impl SharedConfig {
         )))
     }
 
-    // NOTE: Called only from config thread
-    fn publish(&self, config: Config) {
-        self.0.store(std::sync::Arc::new(config));
+    fn store(&self, config: std::sync::Arc<Config>) {
+        self.0.store(config);
     }
 
-    // Called from any thread — one atomic pointer load
     pub fn load(&self) -> arc_swap::Guard<std::sync::Arc<Config>> {
         self.0.load()
     }
@@ -122,7 +132,8 @@ impl ConfigContext {
 
                     Self::run(config_context);
                 }
-            });
+            })
+            .map_err(|err| crate::error::InitError::Mlua { action: "whoops" })?;
 
         init_done_rx
             .recv()
@@ -148,20 +159,17 @@ impl ConfigContext {
             | mlua::StdLib::OS;
         let options = mlua::LuaOptions::default();
 
-        let lua =
-            mlua::Lua::new_with(libs, options).map_err(|err| crate::error::InitError::Mlua {
-                action: "init lua",
-                source: err,
-            })?;
+        let lua = mlua::Lua::new_with(libs, options)
+            .map_err(|err| crate::error::InitError::Mlua { action: "init lua" })?;
 
-        lua.set_app_data(Config::default());
+        lua.set_app_data(std::rc::Rc::new(Config::default()));
+        lua.set_app_data(shared.clone());
 
         let mux_table = api::create_global_table(&lua)?;
         lua.globals()
             .set("Mux", mux_table)
             .map_err(|err| crate::error::InitError::Mlua {
                 action: "set Mux table",
-                source: err,
             })?;
 
         let mut config_context = Self {
@@ -171,8 +179,7 @@ impl ConfigContext {
             event_rx,
         };
 
-        let path = &config_context.path;
-        Self::exec_config_file(&config_context, path);
+        Self::exec_config_file(&config_context)?;
 
         Ok(config_context)
     }
@@ -185,41 +192,33 @@ impl ConfigContext {
                     if let Some(path) = path {
                         self.path = path;
                     }
-                    let path = self.path.clone();
-                    done.send(self.exec_config_file(&path));
+
+                    // NOTE: You don't need to handle error here cause it is send to the caller
+                    done.send(self.exec_config_file());
                 }
             }
         }
     }
 
-    fn exec_config_file(&self, path: &std::path::Path) -> Result<(), crate::error::InitError> {
-        *self.lua.app_data_mut::<Config>().unwrap() = Config::default();
+    #[must_use = "You should handle error variant of the Result"]
+    fn exec_config_file(&self) -> Result<(), crate::error::InitError> {
+        if let Some(mut rc) = self.lua.app_data_mut::<std::rc::Rc<Config>>() {
+            *rc = std::rc::Rc::new(Config::default());
+        }
 
-        let source = Self::read_config_source(path).map_err(|e| crate::error::InitError::Io {
-            action: "read config file",
-            path: Some(path.to_owned()),
-            source: e,
-        })?;
+        let source =
+            Self::read_config_source(&self.path).map_err(|e| crate::error::InitError::Io {
+                action: "read config file",
+                path: Some(self.path.clone()),
+                source: e,
+            })?;
 
         self.lua
             .load(&source)
             .exec()
             .map_err(|e| crate::error::InitError::Mlua {
                 action: "execute config file",
-                source: e,
             })?;
-
-        // Extract Config out of app_data, wrap in Arc, publish atomically.
-        // All other threads see the new config on their next .load().
-        // Old Arc<Config> is dropped when all readers are done with it —
-        // no reader is ever blocked or invalidated mid-read.
-        let mut config = self.lua.app_data_mut::<Config>().unwrap();
-
-        // CHECK: If changing that to default is a good idea, maybe instead of damage tracking you
-        // could return from config list of changes for things that need to be explicitly changed
-        // and maintain index only for config that are read on use
-        let new_config = std::mem::replace(&mut *config, Config::default());
-        self.shared.publish(new_config);
 
         Ok(())
     }

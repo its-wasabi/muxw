@@ -5,14 +5,12 @@ pub fn create_global_table(lua: &mlua::Lua) -> Result<mlua::Table, crate::error:
         .create_table()
         .map_err(|err| crate::error::InitError::Mlua {
             action: "create global table Mux",
-            source: err,
         })?;
 
     global_table
         .set("input", input::create_input_table(lua)?)
         .map_err(|err| crate::error::InitError::Mlua {
             action: "set Mux.input table",
-            source: err,
         });
 
     // TODO: Implement rest of the tables

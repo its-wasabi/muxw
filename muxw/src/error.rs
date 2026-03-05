@@ -106,7 +106,6 @@ pub enum InitError {
     },
     Mlua {
         action: &'static str,
-        source: mlua::Error,
     },
 
     Io {
@@ -122,7 +121,7 @@ impl std::fmt::Display for InitError {
             Self::Wayland { action, source } => {
                 write!(f, "Failed to {action}: {source}")
             }
-            Self::Mlua { action, source } => write!(f, "Failed to {action}: {source}"),
+            Self::Mlua { action } => write!(f, "Failed to {action}"),
             Self::Io {
                 action,
                 path,
@@ -142,7 +141,7 @@ impl std::error::Error for InitError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Wayland { action, source } => Some(source),
-            Self::Mlua { action, source } => Some(source),
+            Self::Mlua { action } => None,
             Self::Io {
                 action,
                 path,

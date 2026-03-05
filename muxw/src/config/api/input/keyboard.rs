@@ -16,7 +16,6 @@ pub fn create_input_keyboard_table(
         .create_table()
         .map_err(|err| crate::error::InitError::Mlua {
             action: "create Mux.input.keyboard table",
-            source: err,
         })?;
 
     input_keyboard_table
@@ -27,12 +26,10 @@ pub fn create_input_keyboard_table(
             })
             .map_err(|err| crate::error::InitError::Mlua {
                 action: "create Mux.input.keyboard.get() function",
-                source: err,
             })?,
         )
         .map_err(|err| crate::error::InitError::Mlua {
             action: "set Mux.input.keyboard.get() function",
-            source: err,
         })?;
 
     Ok(input_keyboard_table)
@@ -80,37 +77,34 @@ impl mlua::UserData for KeyboardConfigBuilder {
         // Returns nothing modifies the object on which it is called
         // TODO: Returns self so calls can be chained: kb:layout("us"):options("...") and can modify
         // the object on which it is called its user preference how to use that
-        methods.add_method_mut("layout", |_, this, layout: KeyboardLayout| {
+        methods.add_method_mut("layout", |lua, this, layout: KeyboardLayout| {
             this.layout = layout;
-
-            // We can't return `this` directly (we only have &mut Self),
-            // so chaining works by the caller reusing the same variable.
-            // If you want true method chaining return Ok(AnyUserData) —
-            // but that requires cloning. For a config API called once at
-            // startup the simplest and cleanest form is just Ok(()).
-            Ok(())
-        });
-
-        methods.add_method_mut("options", |_, this, options: KeyboardOptions| {
-            this.options = options;
+            crate::config::mutate_config(lua, |config| {
+                config.keyboard_xkb.insert(
+                    this.criteria.clone(),
+                    KeyboardConfig {
+                        layout: this.layout.clone(),
+                        options: this.options.clone(),
+                    },
+                );
+            });
 
             Ok(this.clone())
         });
 
-        methods.add_method("apply", |lua, this, ()| {
-            let mut config = lua
-                .app_data_mut::<crate::config::Config>()
-                .ok_or(mlua::Error::runtime("Config not initialized"))?;
+        methods.add_method_mut("options", |lua, this, options: KeyboardOptions| {
+            this.options = options;
+            crate::config::mutate_config(lua, |config| {
+                config.keyboard_xkb.insert(
+                    this.criteria.clone(),
+                    KeyboardConfig {
+                        layout: this.layout.clone(),
+                        options: this.options.clone(),
+                    },
+                );
+            });
 
-            config.keyboard_xkb.insert(
-                this.criteria.clone(),
-                KeyboardConfig {
-                    layout: this.layout.clone(),
-                    options: this.options.clone(),
-                },
-            );
-
-            Ok(())
+            Ok(this.clone())
         });
     }
 }
@@ -172,7 +166,7 @@ impl mlua::FromLua for KeyboardLayout {
                 from: value.type_name(),
                 to: String::from("Keyboard Layout"),
                 message: Some(String::from("Expected String or table of Strings")),
-            }),
+            })?,
         }
     }
 }
@@ -187,7 +181,7 @@ impl mlua::FromLua for KeyboardOptions {
                 from: value.type_name(),
                 to: String::from("Keyboard Options"),
                 message: Some(String::from("Expected String or table of Strings")),
-            }),
+            })?,
         }
     }
 }

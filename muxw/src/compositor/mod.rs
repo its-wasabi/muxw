@@ -15,12 +15,23 @@ impl Muxw {
 
         #[cfg(debug_assertions)]
         {
+            use core::time;
+
             here!("First config state: {:#?}", config.load());
 
             std::thread::sleep(std::time::Duration::from_secs(8));
-            config_handle.reload(None).unwrap().wait();
-            here!("First config state: {:#?}", config.load());
+            let request_handle = config_handle.reload(None).unwrap();
+            {
+                // Do some stuff
+            }
+
+            request_handle.wait().unwrap();
+            {
+                // Do some stuff requiring reloaded config
+                here!("First config state: {:#?}", config.load());
+            }
         }
+
         // let globals = globals::Globals::new(&display.handle());
         // let mut ev = muxw_event_loop::event_loop::EventLoop::new().unwrap();
         // ev.register(&crate::config::CONFIG.keyboard, |field| {
