@@ -14,7 +14,7 @@ pub struct ConfigContext {
     lua: mlua::Lua,
     path: std::path::PathBuf,
     shared: SharedConfig,
-    event_rx: std::sync::mpsc::Receiver<ConfigEvent>,
+    event_rx: std::sync::mpsc::Receiver<ConfigMessage>,
 }
 
 struct ConfigState {
@@ -33,22 +33,19 @@ pub struct Config {
 #[derive(Debug, Clone)]
 pub struct SharedConfig(std::sync::Arc<arc_swap::ArcSwap<Config>>);
 
-pub enum ConfigEvent {
-    Reload {
-        path: Option<std::path::PathBuf>,
-        done: std::sync::mpsc::Sender<Result<(), crate::error::InitError>>,
-    },
-    Clear {
-        done: std::sync::mpsc::Sender<Result<(), crate::error::InitError>>,
-    },
-    Event {
-        event: api::event::Event,
-        done: std::sync::mpsc::Sender<Result<(), crate::error::InitError>>,
-    },
+pub enum ConfigRequest {
+    Reload { path: Option<std::path::PathBuf> },
+    Clear,
+    Event { event: api::event::Event },
+}
+
+struct ConfigMessage {
+    request: ConfigRequest,
+    done: std::sync::mpsc::Sender<Result<(), crate::error::InitError>>,
 }
 
 #[derive(Debug)]
-pub struct ConfigHandle(std::sync::mpsc::Sender<ConfigEvent>);
+pub struct ConfigHandle(std::sync::mpsc::Sender<ConfigMessage>);
 
 #[derive(Debug)]
 pub struct PendingConfigRequest(std::sync::mpsc::Receiver<Result<(), crate::error::InitError>>);
@@ -58,7 +55,7 @@ impl ConfigContext {
         path: &std::path::Path,
     ) -> Result<(ConfigHandle, SharedConfig), crate::error::InitError> {
         let shared = crate::config::SharedConfig::new();
-        let (event_tx, event_rx) = std::sync::mpsc::channel::<ConfigEvent>();
+        let (event_tx, event_rx) = std::sync::mpsc::channel();
         let (init_done_tx, init_done_rx) =
             std::sync::mpsc::channel::<Result<(), crate::error::InitError>>();
 
@@ -99,7 +96,7 @@ impl ConfigContext {
 
     fn init(
         path: std::path::PathBuf,
-        event_rx: std::sync::mpsc::Receiver<ConfigEvent>,
+        event_rx: std::sync::mpsc::Receiver<ConfigMessage>,
         shared: SharedConfig,
     ) -> Result<Self, crate::error::InitError> {
         let libs = mlua::StdLib::TABLE
@@ -135,38 +132,33 @@ impl ConfigContext {
     }
 
     fn run(mut self) {
-        while let Ok(event) = self.event_rx.recv() {
-            match event {
-                ConfigEvent::Reload { path, done } => {
+        while let Ok(ConfigMessage { request, done }) = self.event_rx.recv() {
+            let result = match request {
+                ConfigRequest::Reload { path } => {
                     if let Some(path) = path {
                         self.path = path;
                     }
+                    self.exec_config_file()
+                }
 
-                    // NOTE: You don't need to handle error here cause it is send to the caller
-                    done.send(self.exec_config_file()).unwrap();
-                }
-                ConfigEvent::Clear { done } => {
-                    if let Some(mut state) = self.lua.app_data_mut::<ConfigState>() {
-                        state.clear();
-                        done.send(Ok(())).unwrap();
-                    } else {
-                        done.send(Err(crate::error::InitError::Mlua {
-                            action: "config user data not initialized",
-                        }));
-                    }
-                }
-                ConfigEvent::Event { event, done } => {
-                    let event_manager = self
-                        .lua
-                        .app_data_mut::<api::event::EventManager>()
-                        .ok_or(crate::error::InitError::Mlua {
-                            action: "event manager user data not initialized",
-                        })
-                        .unwrap();
+                ConfigRequest::Clear => self
+                    .lua
+                    .app_data_mut::<ConfigState>()
+                    .ok_or(crate::error::InitError::Mlua {
+                        action: "config user data not initialized",
+                    })
+                    .map(|mut state| state.clear()),
 
-                    event_manager.call(&self.lua, &event);
-                }
-            }
+                ConfigRequest::Event { event } => self
+                    .lua
+                    .app_data_mut::<api::event::EventManager>()
+                    .ok_or(crate::error::InitError::Mlua {
+                        action: "event manager user data not initialized",
+                    })
+                    .map(|mut manager| manager.call(&self.lua, &event).unwrap()),
+            };
+
+            done.send(result).unwrap();
         }
     }
 
@@ -252,14 +244,12 @@ impl SharedConfig {
 impl ConfigHandle {
     fn dispatch(
         &self,
-        make_event: impl FnOnce(
-            std::sync::mpsc::Sender<Result<(), crate::error::InitError>>,
-        ) -> ConfigEvent,
+        request: ConfigRequest,
     ) -> Result<PendingConfigRequest, crate::error::InitError> {
-        let (done_tx, done_rx) = std::sync::mpsc::channel();
-        let event = make_event(done_tx);
+        let (done, done_rx) = std::sync::mpsc::channel();
+
         self.0
-            .send(event)
+            .send(ConfigMessage { request, done })
             .map_err(|err| crate::error::InitError::Io {
                 action: "send config event",
                 path: None,
@@ -274,11 +264,11 @@ impl ConfigHandle {
         &self,
         path: Option<std::path::PathBuf>,
     ) -> Result<PendingConfigRequest, crate::error::InitError> {
-        self.dispatch(|done| ConfigEvent::Reload { path, done })
+        self.dispatch(ConfigRequest::Reload { path })
     }
 
     pub fn reset(&self) -> Result<PendingConfigRequest, crate::error::InitError> {
-        self.dispatch(|done| ConfigEvent::Clear { done })
+        self.dispatch(ConfigRequest::Clear)
     }
 }
 
@@ -289,7 +279,6 @@ impl PendingConfigRequest {
             action: "config thread died before completion operation",
             path: None,
             source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
-        })??;
-        Ok(())
+        })?
     }
 }
