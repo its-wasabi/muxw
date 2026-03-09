@@ -17,11 +17,15 @@ impl Muxw {
         {
             here!("First config state: {:#?}", config.load());
 
-            config_handle.reset().unwrap().wait();
-            here!("After reset: {:#?}", config.load());
+            for _ in 0..5 {
+                config_handle.reset().unwrap().wait();
+                here!("After reset: {:#?}", config.load());
+            }
 
-            config_handle.reload(None).unwrap().wait();
-            here!("After reload: {:#?}", config.load());
+            for _ in 0..2 {
+                config_handle.reload(None).unwrap().wait();
+                here!("After reload: {:#?}", config.load());
+            }
         }
 
         // let globals = globals::Globals::new(&display.handle());

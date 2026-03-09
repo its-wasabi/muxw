@@ -3,25 +3,6 @@ use crate::config::api::event;
 
 mod api;
 
-fn mutate_config(lua: &mlua::Lua, f: impl FnOnce(&mut Config)) -> mlua::Result<()> {
-    lua.app_data_mut::<ConfigState>()
-        .ok_or_else(|| mlua::Error::runtime("Config user data not initialized"))?
-        .mutate(f);
-    Ok(())
-}
-
-pub struct ConfigContext {
-    lua: mlua::Lua,
-    path: std::path::PathBuf,
-    shared: SharedConfig,
-    event_rx: std::sync::mpsc::Receiver<ConfigMessage>,
-}
-
-struct ConfigState {
-    local: Config,
-    shared: SharedConfig,
-}
-
 #[derive(Debug, Default, Clone)]
 pub struct Config {
     pub keyboard_xkb: std::collections::HashMap<
@@ -30,7 +11,7 @@ pub struct Config {
     >,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SharedConfig(std::sync::Arc<arc_swap::ArcSwap<Config>>);
 
 pub enum ConfigRequest {
@@ -45,53 +26,131 @@ struct ConfigMessage {
 }
 
 #[derive(Debug)]
-pub struct ConfigHandle(std::sync::mpsc::Sender<ConfigMessage>);
+pub struct ConfigHandle(std::sync::mpsc::SyncSender<ConfigMessage>);
 
 #[derive(Debug)]
 pub struct PendingConfigRequest(std::sync::mpsc::Receiver<Result<(), crate::error::InitError>>);
+
+struct ConfigState {
+    local: Config,
+    shared: SharedConfig,
+}
+
+pub struct ConfigContext {
+    lua: mlua::Lua,
+    path: std::path::PathBuf,
+    shared: SharedConfig,
+    event_rx: std::sync::mpsc::Receiver<ConfigMessage>,
+}
+
+impl SharedConfig {
+    fn store(&self, config: std::sync::Arc<Config>) {
+        self.0.store(config);
+    }
+
+    pub fn load(&self) -> arc_swap::Guard<std::sync::Arc<Config>> {
+        self.0.load()
+    }
+}
+
+impl ConfigState {
+    fn new(shared: SharedConfig) -> Self {
+        Self {
+            local: Config::default(),
+            shared,
+        }
+    }
+
+    fn mutate(&mut self, f: impl FnOnce(&mut Config)) {
+        f(&mut self.local);
+        self.shared.store(std::sync::Arc::new(self.local.clone()));
+    }
+
+    fn clear(&mut self) {
+        self.local = Config::default();
+        self.shared.store(std::sync::Arc::new(Config::default()));
+    }
+}
+
+impl ConfigHandle {
+    pub fn reload(
+        &self,
+        path: Option<std::path::PathBuf>,
+    ) -> Result<PendingConfigRequest, crate::error::InitError> {
+        self.dispatch(ConfigRequest::Reload { path })
+    }
+
+    pub fn reset(&self) -> Result<PendingConfigRequest, crate::error::InitError> {
+        self.dispatch(ConfigRequest::Clear)
+    }
+
+    fn dispatch(
+        &self,
+        request: ConfigRequest,
+    ) -> Result<PendingConfigRequest, crate::error::InitError> {
+        let (done, done_rx) = std::sync::mpsc::channel();
+
+        self.0
+            .send(ConfigMessage { request, done })
+            .map_err(|err| crate::error::InitError::Io {
+                action: "send config event",
+                path: None,
+                source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
+            })?;
+        Ok(PendingConfigRequest(done_rx))
+    }
+}
+
+impl PendingConfigRequest {
+    pub fn wait(self) -> Result<(), crate::error::InitError> {
+        self.0.recv().map_err(|err| crate::error::InitError::Io {
+            action: "config thread died before completion operation",
+            path: None,
+            source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
+        })?
+    }
+}
 
 impl ConfigContext {
     pub fn spawn(
         path: &std::path::Path,
     ) -> Result<(ConfigHandle, SharedConfig), crate::error::InitError> {
-        let shared = crate::config::SharedConfig::new();
-        let (event_tx, event_rx) = std::sync::mpsc::channel();
-        let (init_done_tx, init_done_rx) =
-            std::sync::mpsc::channel::<Result<(), crate::error::InitError>>();
+        let shared = crate::config::SharedConfig::default();
+
+        // TODO: Check if you should use sync_channel or channel
+        let (msg_tx, msg_rx) = std::sync::mpsc::sync_channel(0);
+        let (init_tx, init_rx) =
+            std::sync::mpsc::sync_channel::<Result<(), crate::error::InitError>>(0);
 
         std::thread::Builder::new()
-            .name(String::from("config"))
+            .name("config".into())
             .spawn({
                 let path = path.to_owned();
                 let shared = shared.clone();
 
-                move || {
-                    let config_context = match Self::init(path, event_rx, shared) {
-                        Ok(config_context) => {
-                            init_done_tx.send(Ok(())).unwrap();
-                            config_context
-                        }
-                        Err(err) => {
-                            init_done_tx.send(Err(err)).unwrap();
-                            return;
-                        }
-                    };
-
-                    Self::run(config_context);
+                move || match Self::init(path, msg_rx, shared) {
+                    Ok(context) => {
+                        init_tx.send(Ok(())).unwrap();
+                        Self::run(context);
+                    }
+                    Err(err) => {
+                        init_tx.send(Err(err)).unwrap();
+                    }
                 }
             })
-            .map_err(|err| crate::error::InitError::Mlua { action: "whoops" })?;
-
-        init_done_rx
-            .recv()
-            .map_err(|_| crate::error::InitError::Io {
-                action: "config thread died during init",
+            .map_err(|err| crate::error::InitError::Io {
+                action: "spawn config thread",
                 path: None,
-                source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
-            })??;
+                source: err,
+            })?;
 
-        let config_handle = ConfigHandle(event_tx);
-        Ok((config_handle, shared))
+        init_rx.recv().map_err(|_| crate::error::InitError::Io {
+            action: "config thread died during init",
+            path: None,
+            source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
+        })??;
+
+        Ok((ConfigHandle(msg_tx), shared))
     }
 
     fn init(
@@ -119,50 +178,50 @@ impl ConfigContext {
                 action: "set Mux table",
             })?;
 
-        let mut config_context = Self {
+        let mut context = Self {
             lua,
             path,
             shared,
             event_rx,
         };
 
-        Self::exec_config_file(&config_context)?;
+        context.exec_config_file()?;
 
-        Ok(config_context)
+        Ok(context)
     }
 
     fn run(mut self) {
         while let Ok(ConfigMessage { request, done }) = self.event_rx.recv() {
-            let result = match request {
-                ConfigRequest::Reload { path } => {
-                    if let Some(path) = path {
-                        self.path = path;
-                    }
-                    self.exec_config_file()
-                }
-
-                ConfigRequest::Clear => self
-                    .lua
-                    .app_data_mut::<ConfigState>()
-                    .ok_or(crate::error::InitError::Mlua {
-                        action: "config user data not initialized",
-                    })
-                    .map(|mut state| state.clear()),
-
-                ConfigRequest::Event { event } => self
-                    .lua
-                    .app_data_mut::<api::event::EventManager>()
-                    .ok_or(crate::error::InitError::Mlua {
-                        action: "event manager user data not initialized",
-                    })
-                    .map(|mut manager| manager.call(&self.lua, &event).unwrap()),
-            };
-
+            let result = self.handle_request(request);
             done.send(result).unwrap();
         }
     }
 
-    #[must_use = "You should handle error variant of the Result"]
+    fn handle_request(&mut self, request: ConfigRequest) -> Result<(), crate::error::InitError> {
+        match request {
+            ConfigRequest::Reload { path } => {
+                if let Some(path) = path {
+                    self.path = path;
+                }
+                self.exec_config_file()
+            }
+            ConfigRequest::Clear => self
+                .lua
+                .app_data_mut::<ConfigState>()
+                .ok_or(crate::error::InitError::Mlua {
+                    action: "config user data not initialized",
+                })
+                .map(|mut state| state.clear()),
+            ConfigRequest::Event { event } => self
+                .lua
+                .app_data_mut::<api::event::EventManager>()
+                .ok_or(crate::error::InitError::Mlua {
+                    action: "event manager user data not initialized",
+                })
+                .map(|mut manager| manager.call(&self.lua, &event).unwrap()),
+        }
+    }
+
     fn exec_config_file(&self) -> Result<(), crate::error::InitError> {
         if let Some(mut state) = self.lua.app_data_mut::<ConfigState>() {
             state.clear();
@@ -206,79 +265,9 @@ impl ConfigContext {
     }
 }
 
-impl ConfigState {
-    fn new(shared: SharedConfig) -> Self {
-        Self {
-            local: Config::default(),
-            shared,
-        }
-    }
-
-    fn mutate(&mut self, f: impl FnOnce(&mut Config)) {
-        f(&mut self.local);
-        self.shared.store(std::sync::Arc::new(self.local.clone()));
-    }
-
-    fn clear(&mut self) {
-        self.local = Config::default();
-        self.shared.store(std::sync::Arc::new(Config::default()));
-    }
-}
-
-impl SharedConfig {
-    pub fn new() -> Self {
-        Self(std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
-            Config::default(),
-        )))
-    }
-
-    fn store(&self, config: std::sync::Arc<Config>) {
-        self.0.store(config);
-    }
-
-    pub fn load(&self) -> arc_swap::Guard<std::sync::Arc<Config>> {
-        self.0.load()
-    }
-}
-
-impl ConfigHandle {
-    fn dispatch(
-        &self,
-        request: ConfigRequest,
-    ) -> Result<PendingConfigRequest, crate::error::InitError> {
-        let (done, done_rx) = std::sync::mpsc::channel();
-
-        self.0
-            .send(ConfigMessage { request, done })
-            .map_err(|err| crate::error::InitError::Io {
-                action: "send config event",
-                path: None,
-                source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
-            })?;
-        Ok(PendingConfigRequest(done_rx))
-    }
-}
-
-impl ConfigHandle {
-    pub fn reload(
-        &self,
-        path: Option<std::path::PathBuf>,
-    ) -> Result<PendingConfigRequest, crate::error::InitError> {
-        self.dispatch(ConfigRequest::Reload { path })
-    }
-
-    pub fn reset(&self) -> Result<PendingConfigRequest, crate::error::InitError> {
-        self.dispatch(ConfigRequest::Clear)
-    }
-}
-
-impl PendingConfigRequest {
-    #[must_use = "May return important error"]
-    pub fn wait(self) -> Result<(), crate::error::InitError> {
-        self.0.recv().map_err(|err| crate::error::InitError::Io {
-            action: "config thread died before completion operation",
-            path: None,
-            source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
-        })?
-    }
+fn mutate_config(lua: &mlua::Lua, f: impl FnOnce(&mut Config)) -> mlua::Result<()> {
+    lua.app_data_mut::<ConfigState>()
+        .ok_or_else(|| mlua::Error::runtime("Config user data not initialized"))?
+        .mutate(f);
+    Ok(())
 }
