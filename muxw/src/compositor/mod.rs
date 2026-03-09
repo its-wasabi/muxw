@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use wayland_protocols::xdg::shell::server::xdg_wm_base::XdgWmBase;
 use wayland_server::protocol::{
     wl_compositor::WlCompositor, wl_output::WlOutput, wl_seat::WlSeat, wl_shm::WlShm,
@@ -17,15 +19,28 @@ impl Muxw {
         {
             here!("First config state: {:#?}", config.load());
 
-            for _ in 0..5 {
-                config_handle.reset().unwrap().wait();
-                here!("After reset: {:#?}", config.load());
-            }
+            // for _ in 0..5 {
+            //     config_handle.reset().unwrap().wait();
+            //     here!("After reset: {:#?}", config.load());
+            // }
 
-            for _ in 0..2 {
-                config_handle.reload(None).unwrap().wait();
-                here!("After reload: {:#?}", config.load());
-            }
+            // for _ in 0..2 {
+            //     config_handle.reload(None).unwrap().wait();
+            //     here!("After reload: {:#?}", config.load());
+            // }
+
+            config_handle
+                .event(crate::config::api::event::Event::new(
+                    crate::config::api::event::EventKind::Keyboard(
+                        crate::config::api::event::keyboard::KeyboardEvent::Added {
+                            name: "no".into(),
+                            seat: "second".into(),
+                            port: "3".into(),
+                        },
+                    ),
+                ))
+                .unwrap()
+                .wait();
         }
 
         // let globals = globals::Globals::new(&display.handle());

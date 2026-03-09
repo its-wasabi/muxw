@@ -10,6 +10,15 @@ pub struct Event {
     timestamp: std::time::Instant,
 }
 
+impl Event {
+    pub fn new(kind: EventKind) -> Self {
+        Self {
+            kind,
+            timestamp: std::time::Instant::now(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum EventKind {
     Keyboard(keyboard::KeyboardEvent),

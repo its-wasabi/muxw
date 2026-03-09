@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use crate::config::api::event;
 
-mod api;
+pub mod api;
 
 #[derive(Debug, Default, Clone)]
 pub struct Config {
@@ -22,7 +22,7 @@ pub enum ConfigRequest {
 
 struct ConfigMessage {
     request: ConfigRequest,
-    done: std::sync::mpsc::Sender<Result<(), crate::error::InitError>>,
+    done: std::sync::mpsc::SyncSender<Result<(), crate::error::InitError>>,
 }
 
 #[derive(Debug)]
@@ -84,11 +84,18 @@ impl ConfigHandle {
         self.dispatch(ConfigRequest::Clear)
     }
 
+    pub fn event(
+        &self,
+        event: api::event::Event,
+    ) -> Result<PendingConfigRequest, crate::error::InitError> {
+        self.dispatch(ConfigRequest::Event { event })
+    }
+
     fn dispatch(
         &self,
         request: ConfigRequest,
     ) -> Result<PendingConfigRequest, crate::error::InitError> {
-        let (done, done_rx) = std::sync::mpsc::channel();
+        let (done, done_rx) = std::sync::mpsc::sync_channel(1);
 
         self.0
             .send(ConfigMessage { request, done })
@@ -193,7 +200,7 @@ impl ConfigContext {
     fn run(mut self) {
         while let Ok(ConfigMessage { request, done }) = self.event_rx.recv() {
             let result = self.handle_request(request);
-            done.send(result).unwrap();
+            let _ = done.send(result);
         }
     }
 
@@ -205,6 +212,7 @@ impl ConfigContext {
                 }
                 self.exec_config_file()
             }
+
             ConfigRequest::Clear => self
                 .lua
                 .app_data_mut::<ConfigState>()
@@ -212,13 +220,19 @@ impl ConfigContext {
                     action: "config user data not initialized",
                 })
                 .map(|mut state| state.clear()),
+
+            // TODO: Move the handlers of each request to related config file maybe make handling
+            // these a trait
             ConfigRequest::Event { event } => self
                 .lua
                 .app_data_mut::<api::event::EventManager>()
                 .ok_or(crate::error::InitError::Mlua {
-                    action: "event manager user data not initialized",
-                })
-                .map(|mut manager| manager.call(&self.lua, &event).unwrap()),
+                    action: "event manager not initialized",
+                })?
+                .call(&self.lua, &event)
+                .map_err(|_| crate::error::InitError::Mlua {
+                    action: "dispatch event to lua handler",
+                }),
         }
     }
 
@@ -228,10 +242,10 @@ impl ConfigContext {
         }
 
         let source =
-            Self::read_config_source(&self.path).map_err(|e| crate::error::InitError::Io {
+            Self::read_config_source(&self.path).map_err(|err| crate::error::InitError::Io {
                 action: "read config file",
                 path: Some(self.path.clone()),
-                source: e,
+                source: err,
             })?;
 
         self.lua
