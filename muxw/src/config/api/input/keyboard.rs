@@ -72,13 +72,9 @@ impl mlua::UserData for KeyboardConfigContext {
         methods.add_method_mut("layout", |lua, this, layout: KeyboardLayout| {
             this.config.layout = layout;
             crate::config::mutate_config(lua, |config| {
-                config.keyboard_xkb.insert(
-                    this.criteria.clone(),
-                    KeyboardConfig {
-                        layout: this.config.layout.clone(),
-                        options: this.config.options.clone(),
-                    },
-                );
+                config
+                    .keyboard_xkb
+                    .insert(this.criteria.clone(), this.config.clone());
             });
 
             Ok(this.clone())
@@ -87,13 +83,9 @@ impl mlua::UserData for KeyboardConfigContext {
         methods.add_method_mut("options", |lua, this, options: KeyboardOptions| {
             this.config.options = options;
             crate::config::mutate_config(lua, |config| {
-                config.keyboard_xkb.insert(
-                    this.criteria.clone(),
-                    KeyboardConfig {
-                        layout: this.config.layout.clone(),
-                        options: this.config.options.clone(),
-                    },
-                );
+                config
+                    .keyboard_xkb
+                    .insert(this.criteria.clone(), this.config.clone());
             });
 
             Ok(this.clone())
