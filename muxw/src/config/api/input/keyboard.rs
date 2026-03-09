@@ -20,69 +20,63 @@ pub fn create_input_keyboard_table(
         .set(
             "get",
             lua.create_function(|_, criteria: KeyboardCriteria| {
-                Ok(KeyboardConfigBuilder::new(criteria))
+                Ok(KeyboardConfigContext::new(criteria))
             })
-            .map_err(|err| crate::error::InitError::Mlua {
+            .map_err(|_| crate::error::InitError::Mlua {
                 action: "create Mux.input.keyboard.get() function",
             })?,
         )
-        .map_err(|err| crate::error::InitError::Mlua {
+        .map_err(|_| crate::error::InitError::Mlua {
             action: "set Mux.input.keyboard.get() function",
         })?;
 
     Ok(input_keyboard_table)
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize, Hash, Default)]
 pub struct KeyboardCriteria {
     pub name: Option<String>,
     pub port: Option<String>,
     pub seat: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct KeyboardConfig {
     pub layout: KeyboardLayout,
     pub options: KeyboardOptions,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct KeyboardLayout(pub Option<String>);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct KeyboardOptions(pub Option<String>);
 
-#[derive(Clone)]
-pub struct KeyboardConfigBuilder {
+#[derive(Clone, Default)]
+pub struct KeyboardConfigContext {
     criteria: KeyboardCriteria,
-    layout: KeyboardLayout,
-    options: KeyboardOptions,
+    config: KeyboardConfig,
 }
 
-impl KeyboardConfigBuilder {
-    const fn new(criteria: KeyboardCriteria) -> Self {
+impl KeyboardConfigContext {
+    fn new(criteria: KeyboardCriteria) -> Self {
         Self {
             criteria,
-            layout: KeyboardLayout(None),
-            options: KeyboardOptions(None),
+            config: KeyboardConfig::default(),
         }
     }
 }
 
-impl mlua::UserData for KeyboardConfigBuilder {
+impl mlua::UserData for KeyboardConfigContext {
     fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
-        // kb:layout("us") or kb:layout({"us","pl"}) or kb:layout("us,pl")
-        // Returns nothing modifies the object on which it is called
-        // TODO: Returns self so calls can be chained: kb:layout("us"):options("...") and can modify
-        // the object on which it is called its user preference how to use that
         methods.add_method_mut("layout", |lua, this, layout: KeyboardLayout| {
-            this.layout = layout;
+            this.config.layout = layout;
             crate::config::mutate_config(lua, |config| {
                 config.keyboard_xkb.insert(
                     this.criteria.clone(),
                     KeyboardConfig {
-                        layout: this.layout.clone(),
-                        options: this.options.clone(),
+                        layout: this.config.layout.clone(),
+                        options: this.config.options.clone(),
                     },
                 );
             });
@@ -91,13 +85,13 @@ impl mlua::UserData for KeyboardConfigBuilder {
         });
 
         methods.add_method_mut("options", |lua, this, options: KeyboardOptions| {
-            this.options = options;
+            this.config.options = options;
             crate::config::mutate_config(lua, |config| {
                 config.keyboard_xkb.insert(
                     this.criteria.clone(),
                     KeyboardConfig {
-                        layout: this.layout.clone(),
-                        options: this.options.clone(),
+                        layout: this.config.layout.clone(),
+                        options: this.config.options.clone(),
                     },
                 );
             });
@@ -121,20 +115,22 @@ impl KeyboardCriteria {
     }
 
     pub fn matches(&self, name: Option<&str>, port: Option<&str>, seat: Option<&str>) -> bool {
-        if let Some(n) = &self.name {
-            if Some(n.as_str()) != name {
-                return false;
-            }
+        if let Some(n) = &self.name
+            && Some(n.as_str()) != name
+        {
+            return false;
         }
-        if let Some(p) = &self.port {
-            if Some(p.as_str()) != port {
-                return false;
-            }
+
+        if let Some(p) = &self.port
+            && Some(p.as_str()) != port
+        {
+            return false;
         }
-        if let Some(s) = &self.seat {
-            if Some(s.as_str()) != seat {
-                return false;
-            }
+
+        if let Some(s) = &self.seat
+            && Some(s.as_str()) != seat
+        {
+            return false;
         }
 
         true

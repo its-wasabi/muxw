@@ -1,3 +1,6 @@
+#![allow(clippy::unwrap_used)]
+use crate::config::api::event;
+
 mod api;
 
 fn mutate_config(lua: &mlua::Lua, f: impl FnOnce(&mut Config)) -> mlua::Result<()> {
@@ -15,7 +18,7 @@ pub struct ConfigContext {
 }
 
 struct ConfigState {
-    local: std::rc::Rc<Config>,
+    local: Config,
     shared: SharedConfig,
 }
 
@@ -35,7 +38,11 @@ pub enum ConfigEvent {
         path: Option<std::path::PathBuf>,
         done: std::sync::mpsc::Sender<Result<(), crate::error::InitError>>,
     },
-    Reset {
+    Clear {
+        done: std::sync::mpsc::Sender<Result<(), crate::error::InitError>>,
+    },
+    Event {
+        event: api::event::Event,
         done: std::sync::mpsc::Sender<Result<(), crate::error::InitError>>,
     },
 }
@@ -106,6 +113,7 @@ impl ConfigContext {
             .map_err(|err| crate::error::InitError::Mlua { action: "init lua" })?;
 
         lua.set_app_data(ConfigState::new(shared.clone()));
+        lua.set_app_data(api::event::EventManager::default());
 
         let mux_table = api::create_global_table(&lua)?;
         lua.globals()
@@ -137,15 +145,26 @@ impl ConfigContext {
                     // NOTE: You don't need to handle error here cause it is send to the caller
                     done.send(self.exec_config_file()).unwrap();
                 }
-                ConfigEvent::Reset { done } => {
+                ConfigEvent::Clear { done } => {
                     if let Some(mut state) = self.lua.app_data_mut::<ConfigState>() {
-                        state.reset();
+                        state.clear();
                         done.send(Ok(())).unwrap();
                     } else {
                         done.send(Err(crate::error::InitError::Mlua {
                             action: "config user data not initialized",
                         }));
                     }
+                }
+                ConfigEvent::Event { event, done } => {
+                    let event_manager = self
+                        .lua
+                        .app_data_mut::<api::event::EventManager>()
+                        .ok_or(crate::error::InitError::Mlua {
+                            action: "event manager user data not initialized",
+                        })
+                        .unwrap();
+
+                    event_manager.call(&self.lua, &event);
                 }
             }
         }
@@ -154,7 +173,7 @@ impl ConfigContext {
     #[must_use = "You should handle error variant of the Result"]
     fn exec_config_file(&self) -> Result<(), crate::error::InitError> {
         if let Some(mut state) = self.lua.app_data_mut::<ConfigState>() {
-            state.reset();
+            state.clear();
         }
 
         let source =
@@ -198,19 +217,18 @@ impl ConfigContext {
 impl ConfigState {
     fn new(shared: SharedConfig) -> Self {
         Self {
-            local: std::rc::Rc::new(Config::default()),
+            local: Config::default(),
             shared,
         }
     }
 
     fn mutate(&mut self, f: impl FnOnce(&mut Config)) {
-        f(std::rc::Rc::make_mut(&mut self.local));
-        self.shared
-            .store(std::sync::Arc::new((*self.local).clone()));
+        f(&mut self.local);
+        self.shared.store(std::sync::Arc::new(self.local.clone()));
     }
 
-    fn reset(&mut self) {
-        self.local = std::rc::Rc::new(Config::default());
+    fn clear(&mut self) {
+        self.local = Config::default();
         self.shared.store(std::sync::Arc::new(Config::default()));
     }
 }
@@ -260,7 +278,7 @@ impl ConfigHandle {
     }
 
     pub fn reset(&self) -> Result<PendingConfigRequest, crate::error::InitError> {
-        self.dispatch(|done| ConfigEvent::Reset { done })
+        self.dispatch(|done| ConfigEvent::Clear { done })
     }
 }
 

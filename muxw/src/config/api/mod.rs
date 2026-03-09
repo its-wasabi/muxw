@@ -1,3 +1,4 @@
+pub mod event;
 pub mod input;
 
 pub fn create_global_table(lua: &mlua::Lua) -> Result<mlua::Table, crate::error::InitError> {
