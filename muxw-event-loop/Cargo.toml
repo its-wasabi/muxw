@@ -1,5 +1,5 @@
 [package]
-name = "muxw-bind-epoll"
+name = "muxw-event-loop"
 version = "0.1.0"
 edition = "2024"
 

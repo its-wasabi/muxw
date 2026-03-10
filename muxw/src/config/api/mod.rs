@@ -14,7 +14,11 @@ pub fn create_global_table(lua: &mlua::Lua) -> Result<mlua::Table, crate::error:
             action: "set Mux.input table",
         });
 
-    // TODO: Implement rest of the tables
+    global_table
+        .set("event", event::create_event_table(lua)?)
+        .map_err(|err| crate::error::InitError::Mlua {
+            action: "set Mux.event table",
+        })?;
 
     Ok(global_table)
 }

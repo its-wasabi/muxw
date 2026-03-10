@@ -19,20 +19,11 @@ impl Muxw {
         {
             here!("First config state: {:#?}", config.load());
 
-            // for _ in 0..5 {
-            //     config_handle.reset().unwrap().wait();
-            //     here!("After reset: {:#?}", config.load());
-            // }
-
-            // for _ in 0..2 {
-            //     config_handle.reload(None).unwrap().wait();
-            //     here!("After reload: {:#?}", config.load());
-            // }
-
+            // TODO: Fix the api (to long)
             config_handle
                 .event(crate::config::api::event::Event::new(
                     crate::config::api::event::EventKind::Keyboard(
-                        crate::config::api::event::keyboard::KeyboardEvent::Added {
+                        crate::config::api::event::input::keyboard::KeyboardEvent::Added {
                             name: "no".into(),
                             seat: "second".into(),
                             port: "3".into(),

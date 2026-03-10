@@ -202,6 +202,7 @@ enum CtlOperation {
 #[cfg_attr(target_arch = "x86_64", repr(packed))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Event {
+    // TODO: Rename config to be more descriptive or create type that will describe it
     config: u32,
     data: u64,
 }
@@ -239,7 +240,7 @@ pub fn create(cloexec: bool) -> Result<RawFd> {
 /// Returns `Err(io::Error)` when:
 /// - You provided invalid `epoll_fd`
 /// - You provided invalid listener fd
-pub fn add_fd(epoll_fd: RawFd, fd: RawFd, interest: Interest) -> Result<()> {
+pub fn add_fd(epoll_fd: RawFd, fd: std::os::fd::RawFd, interest: Interest) -> Result<()> {
     ctl(epoll_fd, CtlOperation::Add, fd, interest)
 }
 

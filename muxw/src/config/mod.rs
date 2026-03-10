@@ -199,6 +199,8 @@ impl ConfigContext {
 
     fn run(mut self) {
         while let Ok(ConfigMessage { request, done }) = self.event_rx.recv() {
+            // TODO: Make each callback run in its own thread, preferably make it detect how heavy
+            // callback is and create thread depending on that
             let result = self.handle_request(request);
             let _ = done.send(result);
         }
@@ -248,12 +250,11 @@ impl ConfigContext {
                 source: err,
             })?;
 
-        self.lua
-            .load(&source)
-            .exec()
-            .map_err(|e| crate::error::InitError::Mlua {
-                action: "execute config file",
-            })?;
+        // TODO: Unwrap is only temporally until there will be mechanism for handling lua errors
+        self.lua.load(&source).exec().unwrap();
+        // .map_err(|e| crate::error::InitError::Mlua {
+        //     action: "execute config file",
+        // })?;
 
         Ok(())
     }
