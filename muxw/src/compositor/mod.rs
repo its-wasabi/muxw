@@ -17,21 +17,21 @@ impl Muxw {
 
         #[cfg(debug_assertions)]
         {
+            use mlua::IntoLua;
+
             here!("First config state: {:#?}", config.load());
 
-            // TODO: Fix the api (to long)
+            let mut ctx =
+                crate::config::api::event::input::keyboard::KeyboardDeviceEventContext::default();
+            ctx.name = "Hello".into();
+
             config_handle
-                .event(crate::config::api::event::Event::new(
-                    crate::config::api::event::EventKind::Keyboard(
-                        crate::config::api::event::input::keyboard::KeyboardEvent::Added {
-                            name: "no".into(),
-                            seat: "second".into(),
-                            port: "3".into(),
-                        },
-                    ),
+                .event(crate::config::api::event::Event::Keyboard(
+                    crate::config::api::event::input::keyboard::KeyboardEvent::Added(ctx),
                 ))
                 .unwrap()
-                .wait();
+                .wait()
+                .unwrap();
         }
 
         // let globals = globals::Globals::new(&display.handle());

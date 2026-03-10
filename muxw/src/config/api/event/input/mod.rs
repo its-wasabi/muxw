@@ -1,3 +1,5 @@
+use std::any::Any;
+
 pub mod keyboard;
 
 pub fn create_event_input_table(lua: &mlua::Lua) -> Result<mlua::Table, crate::error::InitError> {
@@ -18,3 +20,10 @@ pub fn create_event_input_table(lua: &mlua::Lua) -> Result<mlua::Table, crate::e
 
     Ok(event_input_table)
 }
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum InputEvent {
+    Keyboard(keyboard::KeyboardEvent),
+}
+
+impl mlua::UserData for InputEvent {}

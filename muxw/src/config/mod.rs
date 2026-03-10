@@ -176,7 +176,7 @@ impl ConfigContext {
             .map_err(|err| crate::error::InitError::Mlua { action: "init lua" })?;
 
         lua.set_app_data(ConfigState::new(shared.clone()));
-        lua.set_app_data(api::event::EventManager::default());
+        lua.set_app_data(api::event::EventRegistry::default());
 
         let mux_table = api::create_global_table(&lua)?;
         lua.globals()
@@ -225,16 +225,18 @@ impl ConfigContext {
 
             // TODO: Move the handlers of each request to related config file maybe make handling
             // these a trait
-            ConfigRequest::Event { event } => self
-                .lua
-                .app_data_mut::<api::event::EventManager>()
-                .ok_or(crate::error::InitError::Mlua {
-                    action: "event manager not initialized",
-                })?
-                .call(&self.lua, &event)
-                .map_err(|_| crate::error::InitError::Mlua {
-                    action: "dispatch event to lua handler",
-                }),
+            ConfigRequest::Event { event } => {
+                here!("Fired an event: {event:?}");
+                self.lua
+                    .app_data_mut::<api::event::EventRegistry>()
+                    .ok_or(crate::error::InitError::Mlua {
+                        action: "event manager not initialized",
+                    })?
+                    .fire(&self.lua, &event)
+                    .map_err(|_| crate::error::InitError::Mlua {
+                        action: "dispatch event to lua handler",
+                    })
+            }
         }
     }
 
