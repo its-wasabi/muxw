@@ -21,9 +21,20 @@ pub fn create_event_input_table(lua: &mlua::Lua) -> Result<mlua::Table, crate::e
     Ok(event_input_table)
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InputEvent {
     Keyboard(keyboard::KeyboardEvent),
 }
 
 impl mlua::UserData for InputEvent {}
+
+impl InputEvent {
+    pub fn into_lua_table(&self, lua: &mlua::Lua) -> mlua::Result<mlua::Table> {
+        let t = lua.create_table()?;
+        match self {
+            InputEvent::Keyboard(ctx) => t.set("keyboard", ctx.into_lua_table(lua)?)?,
+        }
+
+        Ok(t)
+    }
+}

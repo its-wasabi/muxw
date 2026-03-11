@@ -26,8 +26,10 @@ impl Muxw {
             ctx.name = "Hello".into();
 
             config_handle
-                .event(crate::config::api::event::Event::Keyboard(
-                    crate::config::api::event::input::keyboard::KeyboardEvent::Added(ctx),
+                .event(crate::config::api::event::Event::Input(
+                    crate::config::api::event::input::InputEvent::Keyboard(
+                        crate::config::api::event::input::keyboard::KeyboardEvent::Added(ctx),
+                    ),
                 ))
                 .unwrap()
                 .wait()
