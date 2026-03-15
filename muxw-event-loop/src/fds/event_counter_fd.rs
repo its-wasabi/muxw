@@ -20,7 +20,7 @@ impl EventCounterFd {
     }
 
     pub fn write(&self) {
-        let mut val: u64 = 1;
+        let val: u64 = 1;
         unsafe {
             libc::write(
                 self.as_raw_fd(),

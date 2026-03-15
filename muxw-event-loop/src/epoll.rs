@@ -231,6 +231,7 @@ impl Event {
 /// # Errors
 /// Returns error when epoll failed to create
 /// The fallout lies on the system side not caller
+#[allow(dead_code)]
 pub fn create(cloexec: bool) -> Result<RawFd> {
     let flags = if cloexec { libc::EPOLL_CLOEXEC } else { 0 };
     unsafe { ok_or_get_error(libc::epoll_create1(flags)) }
@@ -240,6 +241,7 @@ pub fn create(cloexec: bool) -> Result<RawFd> {
 /// Returns `Err(io::Error)` when:
 /// - You provided invalid `epoll_fd`
 /// - You provided invalid listener fd
+#[allow(dead_code)]
 pub fn add_fd(epoll_fd: RawFd, fd: std::os::fd::RawFd, interest: Interest) -> Result<()> {
     ctl(epoll_fd, CtlOperation::Add, fd, interest)
 }
@@ -248,6 +250,7 @@ pub fn add_fd(epoll_fd: RawFd, fd: std::os::fd::RawFd, interest: Interest) -> Re
 /// Returns `Err(io::Error)` when:
 /// - You provided invalid `epoll_fd`
 /// - You provided invalid listener fd
+#[allow(dead_code)]
 pub fn mod_fd(epoll_fd: RawFd, fd: RawFd, interest: Interest) -> Result<()> {
     ctl(epoll_fd, CtlOperation::Mod, fd, interest)
 }
@@ -256,10 +259,12 @@ pub fn mod_fd(epoll_fd: RawFd, fd: RawFd, interest: Interest) -> Result<()> {
 /// Returns `Err(io::Error)` when:
 /// - You provided invalid `epoll_fd`
 /// - You provided invalid listener fd
+#[allow(dead_code)]
 pub fn del_fd(epoll_fd: RawFd, fd: RawFd) -> Result<()> {
     ctl(epoll_fd, CtlOperation::Del, fd, Interest::empty())
 }
 
+#[allow(dead_code)]
 fn ctl(epoll_fd: RawFd, operation: CtlOperation, fd: RawFd, interest: Interest) -> Result<()> {
     let mut config = libc::epoll_event {
         events: interest.bits(),
