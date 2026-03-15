@@ -1,11 +1,11 @@
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub struct Criteria {
+pub struct DeviceLocation {
     pub name: Option<String>,
     pub port: Option<String>,
     pub seat: Option<String>,
 }
 
-impl Criteria {
+impl DeviceLocation {
     #[must_use = "creates new instance of Criteria"]
     pub fn from_input_device(input_device: &input::Device) -> Self {
         Self {
@@ -44,7 +44,7 @@ impl Criteria {
     }
 }
 
-impl mlua::FromLua for Criteria {
+impl mlua::FromLua for DeviceLocation {
     fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
         if value == mlua::Value::Nil {
             Ok(Self {

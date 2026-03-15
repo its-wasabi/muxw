@@ -62,10 +62,28 @@ pub fn create_event_input_keyboard_table(
 
 #[derive(Debug, Clone)]
 pub enum KeyboardEvent {
-    Added(KeyboardDeviceEventContext),
-    Removed(KeyboardDeviceEventContext),
-    Pressed(KeyboardKeyEventContext),
-    KeyRepeat(KeyboardKeyEventContext),
+    Added {
+        // TODO: While working with callback of keyboard added you are still using the keyboard
+        // criteria (via KeyboardConfigBuilder), you should use only KeyboardConfig and apply
+        // directly to kb object stored or referenced by the passed event to fire
+        // 1. Swap KeyboardConfigBuilder to KeyboardConfig
+        // 2. Find a way to store data used by the event but not exposed to the user
+        // ! Remember to still update the Config struct in case of future updates
+        keyboard: crate::config::api::input::keyboard::KeyboardConfigBuilder,
+        location: muxw_types::input::DeviceLocation,
+    },
+    Removed {
+        location: muxw_types::input::DeviceLocation,
+    },
+
+    Pressed {
+        location: muxw_types::input::DeviceLocation,
+        key: muxw_types::input::keyboard::Key,
+    },
+    KeyRepeat {
+        location: muxw_types::input::DeviceLocation,
+        key: muxw_types::input::keyboard::Key,
+    },
 }
 
 impl Eq for KeyboardEvent {}
@@ -81,16 +99,18 @@ impl std::hash::Hash for KeyboardEvent {
     }
 }
 
-impl mlua::UserData for KeyboardEvent {}
+impl mlua::UserData for KeyboardEvent {
+    fn add_fields<F: mlua::UserDataFields<Self>>(fields: &mut F) {
+        match Self {}
+    }
+}
 
 impl KeyboardEvent {
     pub fn into_lua_table(&self, lua: &mlua::Lua) -> mlua::Result<mlua::Table> {
         let t = lua.create_table()?;
         match self {
             KeyboardEvent::Added(ctx) | KeyboardEvent::Removed(ctx) => {
-                t.set("name", ctx.name.clone())?;
-                t.set("seat", ctx.seat.clone())?;
-                t.set("port", ctx.port.clone())?;
+                t.set("", ctx.name.clone())?;
             }
             KeyboardEvent::Pressed(ctx) | KeyboardEvent::KeyRepeat(ctx) => {
                 t.set("name", ctx.device.name.clone())?;
@@ -103,21 +123,4 @@ impl KeyboardEvent {
         }
         Ok(t)
     }
-}
-
-// FIX: Remove default and make that depend on the device
-#[derive(Default, Clone, Debug)]
-pub struct KeyboardDeviceEventContext {
-    pub name: String,
-    pub seat: String,
-    pub port: String,
-}
-
-// FIX: Remove default and make that depend on the device
-#[derive(Default, Clone, Debug)]
-pub struct KeyboardKeyEventContext {
-    pub device: KeyboardDeviceEventContext,
-    pub keycode: u32,
-    pub keysym: u32,
-    pub utf8: Option<String>,
 }

@@ -1,3 +1,3 @@
 pub mod criteria;
-pub use criteria::Criteria;
+pub use criteria::DeviceLocation;
 pub mod keyboard;

@@ -10,7 +10,7 @@ pub fn create_input_keyboard_table(
     input_keyboard_table
         .set(
             "get",
-            lua.create_function(|_, criteria: muxw_types::input::Criteria| {
+            lua.create_function(|_, criteria: muxw_types::input::DeviceLocation| {
                 Ok(KeyboardConfigBuilder {
                     criteria,
                     config: muxw_types::input::keyboard::Config::default(),
@@ -29,7 +29,7 @@ pub fn create_input_keyboard_table(
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct KeyboardConfigBuilder {
-    criteria: muxw_types::input::Criteria,
+    criteria: muxw_types::input::DeviceLocation,
     config: muxw_types::input::keyboard::Config,
 }
 

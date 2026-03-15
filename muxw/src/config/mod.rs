@@ -1,3 +1,9 @@
+// TODO: Create Config Delta which is basically a list of config changes starting from last check
+// Make that delta enum so you can match over what to reconfigure
+// 1. You call config.delta() -> () & self.clear()
+// 2. Config A B Y updated
+// 3. Config.delta() -> [A,B,C] & self.clear()
+
 #![allow(clippy::unwrap_used)]
 use crate::config::api::event;
 
@@ -5,8 +11,10 @@ pub mod api;
 
 #[derive(Debug, Default, Clone)]
 pub struct Config {
-    pub keyboard_xkb:
-        std::collections::HashMap<muxw_types::input::Criteria, muxw_types::input::keyboard::Config>,
+    pub keyboard_xkb: std::collections::HashMap<
+        muxw_types::input::DeviceLocation,
+        muxw_types::input::keyboard::Config,
+    >,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -15,7 +23,7 @@ pub struct SharedConfig(std::sync::Arc<arc_swap::ArcSwap<Config>>);
 pub enum ConfigRequest {
     Reload { path: Option<std::path::PathBuf> },
     Clear,
-    Event { event: api::event::Event },
+    Event { event: dyn api::event::EventKind },
 }
 
 struct ConfigMessage {
@@ -84,7 +92,7 @@ impl ConfigHandle {
 
     pub fn event(
         &self,
-        event: api::event::Event,
+        event: api::event::EventKind,
     ) -> Result<PendingConfigRequest, crate::error::InitError> {
         self.dispatch(ConfigRequest::Event { event })
     }
