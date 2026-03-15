@@ -552,8 +552,11 @@ name = "muxw-types"
 version = "0.1.0"
 dependencies = [
  "arc-swap",
+ "input",
  "libc",
+ "mlua",
  "muxw-event-loop",
+ "serde",
 ]
 
 [[package]]

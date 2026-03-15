@@ -1,3 +1,5 @@
+// TODO: Use KeyboardCriteria type for passing name seat port
+
 pub fn create_event_input_keyboard_table(
     lua: &mlua::Lua,
 ) -> Result<mlua::Table, crate::error::InitError> {

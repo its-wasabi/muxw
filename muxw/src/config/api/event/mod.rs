@@ -1,3 +1,6 @@
+#![allow(clippy::todo)]
+#![allow(clippy::unwrap_used)]
+
 use crate::config::api::event;
 
 pub mod input;
@@ -15,15 +18,18 @@ pub fn create_event_table(lua: &mlua::Lua) -> Result<mlua::Table, crate::error::
             "add",
             lua.create_function(
                 move |lua, (event_kind, callback): (Event, mlua::Function)| {
-                    lua.app_data_mut::<EventRegistry>()
-                        .unwrap()
-                        .register(lua, event_kind, callback);
+                    todo!("Register event");
+                    todo!("Return event listener id");
                     Ok(())
                 },
             )
-            .unwrap(),
+            .map_err(|err| crate::error::InitError::Mlua {
+                action: "create Mux.event.add function",
+            })?,
         )
-        .unwrap();
+        .map_err(|err| crate::error::InitError::Mlua {
+            action: "set Mux.event.add function",
+        });
 
     event_table
         .set("input", input::create_event_input_table(lua)?)

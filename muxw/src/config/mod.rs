@@ -5,10 +5,8 @@ pub mod api;
 
 #[derive(Debug, Default, Clone)]
 pub struct Config {
-    pub keyboard_xkb: std::collections::HashMap<
-        api::input::keyboard::KeyboardCriteria,
-        api::input::keyboard::KeyboardConfig,
-    >,
+    pub keyboard_xkb:
+        std::collections::HashMap<muxw_types::input::Criteria, muxw_types::input::keyboard::Config>,
 }
 
 #[derive(Debug, Clone, Default)]
