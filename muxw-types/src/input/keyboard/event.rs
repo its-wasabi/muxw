@@ -9,3 +9,10 @@ pub struct Key {
     pub keysym: u32,
     pub utf8: Option<String>,
 }
+
+impl mlua::IntoLua for Key {
+    fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+        use mlua::LuaSerdeExt;
+        lua.to_value(&self)
+    }
+}

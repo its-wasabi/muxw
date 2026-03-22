@@ -23,7 +23,7 @@ pub struct SharedConfig(std::sync::Arc<arc_swap::ArcSwap<Config>>);
 pub enum ConfigRequest {
     Reload { path: Option<std::path::PathBuf> },
     Clear,
-    Event { event: dyn api::event::EventKind },
+    Event { event: api::event::EventKind },
 }
 
 struct ConfigMessage {
@@ -238,7 +238,8 @@ impl ConfigContext {
                     .ok_or(crate::error::InitError::Mlua {
                         action: "event manager not initialized",
                     })?
-                    .fire(&self.lua, &event)
+                    // FIX: Change that 0.0 into actual timestamp
+                    .fire(&self.lua, event, 0.0)
                     .map_err(|_| crate::error::InitError::Mlua {
                         action: "dispatch event to lua handler",
                     })

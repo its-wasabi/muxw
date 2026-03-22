@@ -1,5 +1,7 @@
 // TODO: Use KeyboardCriteria type for passing name seat port
 
+use crate::config::api::input::keyboard::KeyboardConfigBuilder;
+
 pub fn create_event_input_keyboard_table(
     lua: &mlua::Lua,
 ) -> Result<mlua::Table, crate::error::InitError> {
@@ -9,13 +11,23 @@ pub fn create_event_input_keyboard_table(
                 action: "create Mux.event.input.keyboard table",
             })?;
 
+    let tag = |kind: InputKeyboardEventKind, err_msg| {
+        lua.create_userdata(crate::config::api::event::EventKind::Input(
+            super::InputEventKind::Keyboard(kind),
+        ))
+        .map_err(|_| crate::error::InitError::Mlua { action: err_msg })
+    };
+
     event_input_keyboard_table
         .set(
             "added",
-            lua.create_userdata(KeyboardEvent::Added(KeyboardDeviceEventContext::default()))
-                .map_err(|err| crate::error::InitError::Mlua {
-                    action: "create Mux.event.input.keyboard.added tag",
-                })?,
+            tag(
+                InputKeyboardEventKind::Added {
+                    keyboard: KeyboardConfigBuilder::default(),
+                    location: muxw_types::input::DeviceLocation::default(),
+                },
+                "create Mux.event.input.keyboard.added tag",
+            )?,
         )
         .map_err(|err| crate::error::InitError::Mlua {
             action: "set Mux.event.input.keyboard.added tag",
@@ -24,22 +36,27 @@ pub fn create_event_input_keyboard_table(
     event_input_keyboard_table
         .set(
             "removed",
-            lua.create_userdata(KeyboardEvent::Removed(KeyboardDeviceEventContext::default()))
-                .map_err(|err| crate::error::InitError::Mlua {
-                    action: "crate Mux.event.input.keyboard.removed tag",
-                })?,
+            tag(
+                InputKeyboardEventKind::Removed {
+                    location: muxw_types::input::DeviceLocation::default(),
+                },
+                "create Mux.event.input.keyboard.removed tag",
+            )?,
         )
         .map_err(|err| crate::error::InitError::Mlua {
-            action: "set Mux.event.input.keyboard.remove tag",
+            action: "set Mux.event.input.keyboard.removed tag",
         })?;
 
     event_input_keyboard_table
         .set(
             "pressed",
-            lua.create_userdata(KeyboardEvent::Pressed(KeyboardKeyEventContext::default()))
-                .map_err(|err| crate::error::InitError::Mlua {
-                    action: "create Mux.event.input.keyboard.pressed tag",
-                })?,
+            tag(
+                InputKeyboardEventKind::Pressed {
+                    location: muxw_types::input::DeviceLocation::default(),
+                    key: muxw_types::input::keyboard::Key::default(),
+                },
+                "create Mux.event.input.keyboard.pressed tag",
+            )?,
         )
         .map_err(|err| crate::error::InitError::Mlua {
             action: "set Mux.event.input.keyboard.pressed tag",
@@ -48,27 +65,49 @@ pub fn create_event_input_keyboard_table(
     event_input_keyboard_table
         .set(
             "keyrepeat",
-            lua.create_userdata(KeyboardEvent::KeyRepeat(KeyboardKeyEventContext::default()))
-                .map_err(|err| crate::error::InitError::Mlua {
-                    action: "create Mux.event.input.keyboard.keyrepeat tag",
-                })?,
+            tag(
+                InputKeyboardEventKind::KeyRepeat {
+                    location: muxw_types::input::DeviceLocation::default(),
+                    key: muxw_types::input::keyboard::Key::default(),
+                },
+                "create Mux.event.input.keyboard.keyrepeat tag",
+            )?,
         )
         .map_err(|err| crate::error::InitError::Mlua {
             action: "set Mux.event.input.keyboard.keyrepeat tag",
+        })?;
+
+    event_input_keyboard_table
+        .set(
+            "Inactivity",
+            tag(
+                InputKeyboardEventKind::Inactivity {
+                    timeout_secs: 0,
+                    keyboard: KeyboardConfigBuilder::default(),
+                    location: muxw_types::input::DeviceLocation::default(),
+                },
+                "create Mux.event.input.keyboard.inactivity tag",
+            )?,
+        )
+        .map_err(|err| crate::error::InitError::Mlua {
+            action: "set Mux.event.input.keyboard.inactivity tag",
         })?;
 
     Ok(event_input_keyboard_table)
 }
 
 #[derive(Debug, Clone)]
-pub enum KeyboardEvent {
+pub enum InputKeyboardEventKind {
     Added {
+        // IMPORTANT: That is right make it in the way that .get() function for keyboard returns
+        // keyboard builder with already linked found keyboard instead of just specifying criteria
         // TODO: While working with callback of keyboard added you are still using the keyboard
         // criteria (via KeyboardConfigBuilder), you should use only KeyboardConfig and apply
         // directly to kb object stored or referenced by the passed event to fire
         // 1. Swap KeyboardConfigBuilder to KeyboardConfig
         // 2. Find a way to store data used by the event but not exposed to the user
         // ! Remember to still update the Config struct in case of future updates
+        // IMPORTANT: Remember to do that, later it will be only harder to refactor
         keyboard: crate::config::api::input::keyboard::KeyboardConfigBuilder,
         location: muxw_types::input::DeviceLocation,
     },
@@ -84,43 +123,62 @@ pub enum KeyboardEvent {
         location: muxw_types::input::DeviceLocation,
         key: muxw_types::input::keyboard::Key,
     },
+
+    Inactivity {
+        timeout_secs: u64,
+        keyboard: crate::config::api::input::keyboard::KeyboardConfigBuilder,
+        location: muxw_types::input::DeviceLocation,
+    },
 }
 
-impl Eq for KeyboardEvent {}
-impl PartialEq for KeyboardEvent {
-    fn eq(&self, other: &Self) -> bool {
-        std::mem::discriminant(self) == std::mem::discriminant(other)
+impl InputKeyboardEventKind {
+    pub fn matches(&self, other: &Self) -> bool {
+        if std::mem::discriminant(self) != std::mem::discriminant(other) {
+            return false;
+        }
+
+        match (self, other) {
+            (
+                InputKeyboardEventKind::Inactivity {
+                    timeout_secs: self_timeout_secs,
+                    ..
+                },
+                InputKeyboardEventKind::Inactivity {
+                    timeout_secs: other_timeout_secs,
+                    ..
+                },
+            ) => self_timeout_secs == other_timeout_secs,
+            _ => true,
+        }
     }
-}
 
-impl std::hash::Hash for KeyboardEvent {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        std::mem::discriminant(self).hash(state);
-    }
-}
-
-impl mlua::UserData for KeyboardEvent {
-    fn add_fields<F: mlua::UserDataFields<Self>>(fields: &mut F) {
-        match Self {}
-    }
-}
-
-impl KeyboardEvent {
-    pub fn into_lua_table(&self, lua: &mlua::Lua) -> mlua::Result<mlua::Table> {
-        let t = lua.create_table()?;
+    pub fn populate_event_table(&self, event: &mlua::Table, lua: &mlua::Lua) -> mlua::Result<()> {
         match self {
-            KeyboardEvent::Added(ctx) | KeyboardEvent::Removed(ctx) => {
-                t.set("", ctx.name.clone())?;
+            InputKeyboardEventKind::Added { keyboard, location } => {
+                event.set("keyboard", keyboard.clone())?;
+                event.set("location", location.clone())?;
             }
-            KeyboardEvent::Pressed(ctx) | KeyboardEvent::KeyRepeat(ctx) => {
-                t.set("name", ctx.device.name.clone())?;
-                t.set("seat", ctx.device.seat.clone())?;
-                t.set("port", ctx.device.port.clone())?;
-                t.set("keycode", ctx.keycode)?;
-                t.set("keysym", ctx.keysym)?;
-                t.set("utf8", ctx.utf8.clone())?;
+            InputKeyboardEventKind::Removed { location } => {
+                event.set("location", location.clone())?;
+            }
+            InputKeyboardEventKind::Pressed { location, key } => {
+                event.set("location", location.clone())?;
+                event.set("key", key.clone())?;
+            }
+            InputKeyboardEventKind::KeyRepeat { location, key } => {
+                event.set("location", location.clone())?;
+                event.set("key", key.clone())?;
+            }
+            InputKeyboardEventKind::Inactivity {
+                timeout_secs,
+                location,
+                keyboard,
+            } => {
+                event.set("timeout_secs", *timeout_secs)?;
+                event.set("location", location.clone())?;
+                event.set("keyboard", keyboard.clone())?;
             }
         }
-        Ok(t)
+        Ok(())
     }
 }

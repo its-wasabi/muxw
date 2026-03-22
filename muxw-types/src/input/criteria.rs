@@ -44,6 +44,13 @@ impl DeviceLocation {
     }
 }
 
+impl mlua::IntoLua for DeviceLocation {
+    fn into_lua(self, lua: &mlua::Lua) -> mlua::Result<mlua::Value> {
+        use mlua::LuaSerdeExt;
+        lua.to_value(&self)
+    }
+}
+
 impl mlua::FromLua for DeviceLocation {
     fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
         if value == mlua::Value::Nil {

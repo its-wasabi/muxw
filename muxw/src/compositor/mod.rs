@@ -17,31 +17,8 @@ impl Muxw {
 
         #[cfg(debug_assertions)]
         {
-            use mlua::IntoLua;
-
             here!("First config state: {:#?}", config.load());
-
-            let mut ctx =
-                crate::config::api::event::input::keyboard::KeyboardDeviceEventContext::default();
-            ctx.name = "Hello".into();
-
-            config_handle
-                .event(crate::config::api::event::EventKind::Input(
-                    crate::config::api::event::input::InputEventKind::Keyboard(
-                        crate::config::api::event::input::keyboard::KeyboardEvent::Added(ctx),
-                    ),
-                ))
-                .unwrap()
-                .wait()
-                .unwrap();
         }
-
-        // let globals = globals::Globals::new(&display.handle());
-        // let mut ev = muxw_event_loop::event_loop::EventLoop::new().unwrap();
-        // ev.register(&crate::config::CONFIG.keyboard, |field| {
-        //     println!("\n\n\nHELLO\n\n\n");
-        //     true
-        // });
 
         let display =
             wayland_server::Display::new().map_err(|err| crate::error::InitError::Wayland {
