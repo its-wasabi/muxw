@@ -3,6 +3,11 @@
 // 1. You call config.delta() -> () & self.clear()
 // 2. Config A B Y updated
 // 3. Config.delta() -> [A,B,C] & self.clear()
+//
+// IMPORTANT: Instead of making it watch for changes link systems directly to the config parts in
+// the way that systems when created automatically links itself to some config part like keyboard
+// config builder and then the part of the config like keyboard config is applied it calls that
+// system for action
 
 #![allow(clippy::unwrap_used)]
 use crate::config::api::event;
@@ -90,7 +95,7 @@ impl ConfigHandle {
         self.dispatch(ConfigRequest::Reload { path })
     }
 
-    pub fn reset(&self) -> Result<PendingConfigRequest, crate::error::InitError> {
+    pub fn clear(&self) -> Result<PendingConfigRequest, crate::error::InitError> {
         self.dispatch(ConfigRequest::Clear)
     }
 
@@ -121,7 +126,7 @@ impl ConfigHandle {
 impl PendingConfigRequest {
     pub fn wait(self) -> Result<(), crate::error::InitError> {
         self.0.recv().map_err(|err| crate::error::InitError::Io {
-            action: "config thread died before completion operation",
+            action: "config thread died before completing operation",
             path: None,
             source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
         })?
@@ -225,34 +230,49 @@ impl ConfigContext {
                 self.exec_config_file()
             }
 
-            ConfigRequest::Clear => self
-                .lua
-                .app_data_mut::<ConfigState>()
-                .ok_or(crate::error::InitError::Mlua {
-                    action: "config user data not initialized",
-                })
-                .map(|mut state| state.clear()),
+            ConfigRequest::Clear => self.clear_app_data(),
 
             // TODO: Move the handlers of each request to related config file maybe make handling
             // these a trait
             ConfigRequest::Event { event } => {
                 self.lua
-                    .app_data_mut::<api::event::EventRegistry>()
+                    .app_data_ref::<api::event::EventRegistry>()
                     .ok_or(crate::error::InitError::Mlua {
-                        action: "event manager not initialized",
+                        action: "event registry not initialized",
                     })?
                     // FIX: Change that 0.0 into actual timestamp
                     .fire(&self.lua, &(*event), 0.0)
                     .map_err(|_| crate::error::InitError::Mlua {
-                        action: "dispatch event to lua handler",
+                        action: "fire event in lua handler",
                     })
             }
         }
     }
 
+    fn clear_app_data(&self) -> Result<(), crate::error::InitError> {
+        self.lua
+            .app_data_mut::<ConfigState>()
+            .ok_or(crate::error::InitError::Mlua {
+                action: "ConfigState not initialized",
+            })?
+            .clear();
+
+        self.lua
+            .app_data_mut::<api::event::EventRegistry>()
+            .ok_or(crate::error::InitError::Mlua {
+                action: "EventRegistry not initialized",
+            })?
+            .clear();
+
+        Ok(())
+    }
+
     fn exec_config_file(&self) -> Result<(), crate::error::InitError> {
         if let Some(mut state) = self.lua.app_data_mut::<ConfigState>() {
             state.clear();
+        }
+        if let Some(mut event_registry) = self.lua.app_data_mut::<api::event::EventRegistry>() {
+            event_registry.clear();
         }
 
         let source =

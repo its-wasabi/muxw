@@ -16,24 +16,46 @@ pub fn create_event_table(lua: &mlua::Lua) -> Result<mlua::Table, crate::error::
     event_table
         .set(
             "add",
-            lua.create_function(
-                move |lua, (tag, callback): (mlua::AnyUserData, mlua::Function)| {
-                    let tag = tag.borrow::<EventTag>()?;
-                    let mut registry = lua
-                        .app_data_mut::<EventRegistry>()
-                        .ok_or_else(|| mlua::Error::runtime("Registry not initialized"))?;
-                    let id = registry.register(lua, tag.0.clone_box(), callback)?;
+            lua.create_function(move |lua, (tag, callback): (mlua::Value, mlua::Function)| {
+                let tag = match tag {
+                    mlua::Value::Nil => {
+                        return Err(mlua::Error::runtime(
+                            "event.add() received nil as event tag",
+                        ));
+                    }
 
-                    Ok(id)
-                },
-            )
+                    mlua::Value::UserData(ud) => ud,
+                    other => {
+                        return Err(mlua::Error::runtime(format!(
+                            "event.add() expected an event tag, got {}",
+                            other.type_name()
+                        )));
+                    }
+                };
+
+                let tag = tag.borrow::<EventTag>()?;
+
+                if !tag.0.is_callable_ready() {
+                    return Err(mlua::Error::runtime(format!(
+                        "event tag {} requires arguments, call it first",
+                        tag.0.tag_name(),
+                    )));
+                }
+
+                let mut registry = lua
+                    .app_data_mut::<EventRegistry>()
+                    .ok_or_else(|| mlua::Error::runtime("Registry not initialized"))?;
+                let id = registry.register(lua, tag.0.clone_box(), callback)?;
+
+                Ok(id)
+            })
             .map_err(|err| crate::error::InitError::Mlua {
                 action: "create Mux.event.add function",
             })?,
         )
         .map_err(|err| crate::error::InitError::Mlua {
             action: "set Mux.event.add function",
-        });
+        })?;
 
     event_table
         .set("input", input::create_event_input_table(lua)?)
@@ -70,10 +92,13 @@ pub trait ErasedEventKind: Send + Sync {
     fn populate_event_table(&self, event: &mlua::Table, lua: &mlua::Lua) -> mlua::Result<()>;
     fn as_any(&self) -> &dyn std::any::Any;
     fn clone_box(&self) -> Box<dyn ErasedEventKind>;
-    fn is_callable(&self) -> bool {
-        false
-    }
-    fn call_with_args(&self, lua: &mlua::Lua, args: mlua::MultiValue) -> mlua::Result<EventTag>;
+    fn tag_name(&self) -> &'static str;
+    fn is_callable_ready(&self) -> bool;
+    fn call_with_args(
+        &self,
+        lua: &mlua::Lua,
+        args: mlua::MultiValue,
+    ) -> mlua::Result<mlua::AnyUserData>;
 }
 
 impl EventRegistry {
@@ -102,15 +127,20 @@ impl EventRegistry {
         event: &dyn ErasedEventKind,
         timestamp: f64,
     ) -> mlua::Result<()> {
-        for entry in self.entries.values() {
+        let matching: Vec<&mlua::RegistryKey> = self
+            .entries
+            .values()
             // TODO: check why calling .as_ref() additionally removed error
-            if event.matches(entry.tag.as_ref()) {
-                let event_table = lua.create_table()?;
-                event_table.set("timestamp", timestamp)?;
-                event.populate_event_table(&event_table, lua)?;
-                let callback: mlua::Function = lua.registry_value(&entry.callback_key)?;
-                callback.call::<()>(event_table)?;
-            }
+            .filter(|ev| event.matches(ev.tag.as_ref()))
+            .map(|ev| &ev.callback_key)
+            .collect();
+
+        for key in matching {
+            let event_table = lua.create_table()?;
+            event_table.set("timestamp", timestamp)?;
+            event.populate_event_table(&event_table, lua)?;
+            let callback: mlua::Function = lua.registry_value(key)?;
+            callback.call::<()>(event_table)?;
         }
 
         Ok(())

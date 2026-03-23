@@ -77,10 +77,10 @@ pub fn create_event_input_keyboard_table(
 
     event_input_keyboard_table
         .set(
-            "Inactivity",
+            "inactivity",
             tag(
                 InputKeyboardEventKind::Inactivity {
-                    timeout_secs: 0,
+                    timeout_secs: None,
                     keyboard: KeyboardConfigBuilder::default(),
                     location: muxw_types::input::DeviceLocation::default(),
                 },
@@ -123,14 +123,14 @@ pub enum InputKeyboardEventKind {
     },
 
     Inactivity {
-        timeout_secs: u64,
+        timeout_secs: Option<u64>,
         keyboard: crate::config::api::input::keyboard::KeyboardConfigBuilder,
         location: muxw_types::input::DeviceLocation,
     },
 }
 
 impl super::super::ErasedEventKind for InputKeyboardEventKind {
-    fn matches(&self, other: &dyn crate::config::api::event::ErasedEventKind) -> bool {
+    fn matches(&self, other: &dyn super::super::ErasedEventKind) -> bool {
         let Some(other) = other.as_any().downcast_ref::<Self>() else {
             return false;
         };
@@ -188,15 +188,28 @@ impl super::super::ErasedEventKind for InputKeyboardEventKind {
         Box::new(self.clone())
     }
 
-    fn is_callable(&self) -> bool {
-        matches!(self, Self::Inactivity { .. })
+    fn tag_name(&self) -> &'static str {
+        match self {
+            Self::Added { .. } => "added",
+            Self::Removed { .. } => "removed",
+            Self::Pressed { .. } => "pressed",
+            Self::KeyRepeat { .. } => "keyrepeat",
+            Self::Inactivity { .. } => "inactivity(secs)",
+        }
+    }
+
+    fn is_callable_ready(&self) -> bool {
+        match self {
+            Self::Inactivity { timeout_secs, .. } => timeout_secs.is_some(),
+            _ => true,
+        }
     }
 
     fn call_with_args(
         &self,
         lua: &mlua::Lua,
         args: mlua::MultiValue,
-    ) -> mlua::Result<super::super::EventTag> {
+    ) -> mlua::Result<mlua::AnyUserData> {
         match self {
             Self::Inactivity { .. } => {
                 let timeout_secs: u64 = args
@@ -207,8 +220,8 @@ impl super::super::ErasedEventKind for InputKeyboardEventKind {
                     })
                     .and_then(|v| mlua::FromLua::from_lua(v, lua))?;
 
-                Ok(super::super::EventTag(Box::new(Self::Inactivity {
-                    timeout_secs,
+                lua.create_userdata(super::super::EventTag(Box::new(Self::Inactivity {
+                    timeout_secs: Some(timeout_secs),
                     keyboard: KeyboardConfigBuilder::default(),
                     location: muxw_types::input::DeviceLocation::default(),
                 })))

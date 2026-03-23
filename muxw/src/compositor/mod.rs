@@ -21,14 +21,32 @@ impl Muxw {
 
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(2));
-                let pending = config_handle.event(Box::new(
-                    crate::config::api::event::input::keyboard::InputKeyboardEventKind::Added {
+                // let pending1 = config_handle.event(Box::new(
+                //     crate::config::api::event::input::keyboard::InputKeyboardEventKind::Added {
+                //         keyboard: Default::default(),
+                //         location: Default::default(),
+                //     },
+                // ))?;
+                //
+                // let pending3 = config_handle.event(Box::new(
+                //     crate::config::api::event::input::keyboard::InputKeyboardEventKind::Removed {
+                //         location: Default::default(),
+                //     },
+                // ))?;
+
+                let pending2 = config_handle.event(Box::new(
+                    crate::config::api::event::input::keyboard::InputKeyboardEventKind::Inactivity {
                         keyboard: Default::default(),
                         location: Default::default(),
+                        timeout_secs: None 
                     },
                 ))?;
 
-                pending.wait();
+                // pending1.wait();
+                pending2.wait();
+                // pending3.wait();
+
+                here!("After events: {:#?}", config.load());
             }
         }
 
@@ -37,21 +55,6 @@ impl Muxw {
                 action: "init wayland display",
                 source: err,
             })?;
-
-        // let epoll_fd = libc::epoll_create1(libc::EPOLL_CLOEXEC);
-        // let input = crate::input::InputManager::new(epoll_fd).unwrap();
-        // let events = [muxw_epoll::Event::blank(); 32];
-        // loop {
-        //     let n = muxw_epoll::wait(epoll_fd, None, &mut events);
-        //     for event in &events[..n] {
-        //         let fd = event.fd();
-        //         if fd == input.fd() {
-        //             input.dispatch(|key| {
-        //                 compositor_state.handle_key(key);
-        //             });
-        //         }
-        //     }
-        // }
 
         Ok(Self { display, config })
     }
