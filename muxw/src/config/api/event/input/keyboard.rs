@@ -12,10 +12,8 @@ pub fn create_event_input_keyboard_table(
             })?;
 
     let tag = |kind: InputKeyboardEventKind, err_msg| {
-        lua.create_userdata(crate::config::api::event::EventKind::Input(
-            super::InputEventKind::Keyboard(kind),
-        ))
-        .map_err(|_| crate::error::InitError::Mlua { action: err_msg })
+        lua.create_userdata(super::super::EventTag(Box::new(kind)))
+            .map_err(|_| crate::error::InitError::Mlua { action: err_msg })
     };
 
     event_input_keyboard_table
@@ -131,19 +129,23 @@ pub enum InputKeyboardEventKind {
     },
 }
 
-impl InputKeyboardEventKind {
-    pub fn matches(&self, other: &Self) -> bool {
+impl super::super::ErasedEventKind for InputKeyboardEventKind {
+    fn matches(&self, other: &dyn crate::config::api::event::ErasedEventKind) -> bool {
+        let Some(other) = other.as_any().downcast_ref::<Self>() else {
+            return false;
+        };
+
         if std::mem::discriminant(self) != std::mem::discriminant(other) {
             return false;
         }
 
         match (self, other) {
             (
-                InputKeyboardEventKind::Inactivity {
+                Self::Inactivity {
                     timeout_secs: self_timeout_secs,
                     ..
                 },
-                InputKeyboardEventKind::Inactivity {
+                Self::Inactivity {
                     timeout_secs: other_timeout_secs,
                     ..
                 },
@@ -152,33 +154,66 @@ impl InputKeyboardEventKind {
         }
     }
 
-    pub fn populate_event_table(&self, event: &mlua::Table, lua: &mlua::Lua) -> mlua::Result<()> {
+    fn populate_event_table(&self, t: &mlua::Table, lua: &mlua::Lua) -> mlua::Result<()> {
         match self {
-            InputKeyboardEventKind::Added { keyboard, location } => {
-                event.set("keyboard", keyboard.clone())?;
-                event.set("location", location.clone())?;
+            Self::Added { keyboard, location } => {
+                t.set("keyboard", keyboard.clone())?;
+                t.set("location", location.clone())?;
             }
-            InputKeyboardEventKind::Removed { location } => {
-                event.set("location", location.clone())?;
+            Self::Removed { location } => {
+                t.set("location", location.clone())?;
             }
-            InputKeyboardEventKind::Pressed { location, key } => {
-                event.set("location", location.clone())?;
-                event.set("key", key.clone())?;
+            Self::Pressed { location, key } | Self::KeyRepeat { location, key } => {
+                t.set("location", location.clone())?;
+                t.set("key", key.clone())?;
             }
-            InputKeyboardEventKind::KeyRepeat { location, key } => {
-                event.set("location", location.clone())?;
-                event.set("key", key.clone())?;
-            }
-            InputKeyboardEventKind::Inactivity {
+            Self::Inactivity {
                 timeout_secs,
-                location,
                 keyboard,
+                location,
             } => {
-                event.set("timeout_secs", *timeout_secs)?;
-                event.set("location", location.clone())?;
-                event.set("keyboard", keyboard.clone())?;
+                t.set("timeout_secs", *timeout_secs)?;
+                t.set("keyboard", keyboard.clone())?;
+                t.set("location", location.clone())?;
             }
         }
         Ok(())
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn super::super::ErasedEventKind> {
+        Box::new(self.clone())
+    }
+
+    fn is_callable(&self) -> bool {
+        matches!(self, Self::Inactivity { .. })
+    }
+
+    fn call_with_args(
+        &self,
+        lua: &mlua::Lua,
+        args: mlua::MultiValue,
+    ) -> mlua::Result<super::super::EventTag> {
+        match self {
+            Self::Inactivity { .. } => {
+                let timeout_secs: u64 = args
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| {
+                        mlua::Error::runtime("inactivity() requires a timeout in seconds")
+                    })
+                    .and_then(|v| mlua::FromLua::from_lua(v, lua))?;
+
+                Ok(super::super::EventTag(Box::new(Self::Inactivity {
+                    timeout_secs,
+                    keyboard: KeyboardConfigBuilder::default(),
+                    location: muxw_types::input::DeviceLocation::default(),
+                })))
+            }
+            _ => Err(mlua::Error::runtime("This event kind is not parameterized")),
+        }
     }
 }

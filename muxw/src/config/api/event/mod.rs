@@ -17,10 +17,14 @@ pub fn create_event_table(lua: &mlua::Lua) -> Result<mlua::Table, crate::error::
         .set(
             "add",
             lua.create_function(
-                move |lua, (event_kind, callback): (EventKind, mlua::Function)| {
-                    todo!("Register event");
-                    todo!("Return event listener id");
-                    Ok(())
+                move |lua, (tag, callback): (mlua::AnyUserData, mlua::Function)| {
+                    let tag = tag.borrow::<EventTag>()?;
+                    let mut registry = lua
+                        .app_data_mut::<EventRegistry>()
+                        .ok_or_else(|| mlua::Error::runtime("Registry not initialized"))?;
+                    let id = registry.register(lua, tag.0.clone_box(), callback)?;
+
+                    Ok(id)
                 },
             )
             .map_err(|err| crate::error::InitError::Mlua {
@@ -52,25 +56,31 @@ pub struct EventRegistry {
     entries: std::collections::HashMap<EventId, RegisteredEvent>,
 }
 
-#[derive(Debug)]
 struct RegisteredEvent {
-    tag: EventKind,
-    callback: mlua::RegistryKey,
+    tag: Box<dyn ErasedEventKind>,
+    callback_key: mlua::RegistryKey,
 }
 
-// TODO: After creating working demo move that to muxw_types crate
 pub type EventId = u64;
 
-#[derive(Debug, Clone)]
-pub enum EventKind {
-    Input(input::InputEventKind),
+pub struct EventTag(pub Box<dyn ErasedEventKind>);
+
+pub trait ErasedEventKind: Send + Sync {
+    fn matches(&self, other: &dyn ErasedEventKind) -> bool;
+    fn populate_event_table(&self, event: &mlua::Table, lua: &mlua::Lua) -> mlua::Result<()>;
+    fn as_any(&self) -> &dyn std::any::Any;
+    fn clone_box(&self) -> Box<dyn ErasedEventKind>;
+    fn is_callable(&self) -> bool {
+        false
+    }
+    fn call_with_args(&self, lua: &mlua::Lua, args: mlua::MultiValue) -> mlua::Result<EventTag>;
 }
 
 impl EventRegistry {
     pub fn register(
         &mut self,
         lua: &mlua::Lua,
-        tag: EventKind,
+        tag: Box<dyn ErasedEventKind>,
         callback: mlua::Function,
     ) -> mlua::Result<EventId> {
         let id = self.next_id;
@@ -79,18 +89,26 @@ impl EventRegistry {
             id,
             RegisteredEvent {
                 tag,
-                callback: lua.create_registry_value(callback)?,
+                callback_key: lua.create_registry_value(callback)?,
             },
         );
 
         Ok(id)
     }
 
-    pub fn fire(&self, lua: &mlua::Lua, event: EventKind, timestamp: f64) -> mlua::Result<()> {
+    pub fn fire(
+        &self,
+        lua: &mlua::Lua,
+        event: &dyn ErasedEventKind,
+        timestamp: f64,
+    ) -> mlua::Result<()> {
         for entry in self.entries.values() {
-            if event.matches(&entry.tag) {
-                let callback: mlua::Function = lua.registry_value(&entry.callback)?;
-                let event_table = event.into_event_table(lua, timestamp)?;
+            // TODO: check why calling .as_ref() additionally removed error
+            if event.matches(entry.tag.as_ref()) {
+                let event_table = lua.create_table()?;
+                event_table.set("timestamp", timestamp)?;
+                event.populate_event_table(&event_table, lua)?;
+                let callback: mlua::Function = lua.registry_value(&entry.callback_key)?;
                 callback.call::<()>(event_table)?;
             }
         }
@@ -100,7 +118,7 @@ impl EventRegistry {
 
     pub fn unregister(&mut self, lua: &mlua::Lua, id: EventId) -> mlua::Result<()> {
         if let Some(entry) = self.entries.remove(&id) {
-            lua.remove_registry_value(entry.callback)?;
+            lua.remove_registry_value(entry.callback_key)?;
         }
 
         Ok(())
@@ -111,75 +129,12 @@ impl EventRegistry {
     }
 }
 
-impl EventKind {
-    pub fn matches(&self, other: &Self) -> bool {
-        match (self, other) {
-            (EventKind::Input(fired), EventKind::Input(tag)) => fired.matches(tag),
-        }
-    }
-
-    pub fn into_event_table(&self, lua: &mlua::Lua, timestamp: f64) -> mlua::Result<mlua::Table> {
-        let event = lua.create_table()?;
-        event.set("timestamp", timestamp)?;
-        match self {
-            EventKind::Input(kind) => kind.populate_event_table(&event, lua)?,
-        }
-
-        Ok(event)
-    }
-}
-
-impl mlua::UserData for EventKind {
+impl mlua::UserData for EventTag {
     fn add_fields<F: mlua::UserDataFields<Self>>(fields: &mut F) {}
-
     fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method(
             mlua::MetaMethod::Call,
-            |lua, this, args: mlua::MultiValue| {
-                use input::InputEventKind;
-                use input::keyboard::InputKeyboardEventKind;
-
-                match this {
-                    EventKind::Input(InputEventKind::Keyboard(
-                        InputKeyboardEventKind::Inactivity { .. },
-                    )) => {
-                        let timeout_secs: u64 = args
-                            .into_iter()
-                            .next()
-                            .ok_or_else(|| {
-                                mlua::Error::runtime("Inactivity() requires timeout in seconds")
-                            })
-                            .and_then(|v| mlua::FromLua::from_lua(v, lua))?;
-
-                        lua.create_userdata(EventKind::Input(InputEventKind::Keyboard(
-                            InputKeyboardEventKind::Inactivity {
-                                timeout_secs,
-                                location: Default::default(),
-                                keyboard: Default::default(),
-                            },
-                        )))
-                    }
-                    _ => Err(mlua::Error::runtime(
-                        "This event kind is not parametrized and cannot be called",
-                    )),
-                }
-            },
+            |lua, this, args: mlua::MultiValue| this.0.call_with_args(lua, args),
         );
-    }
-}
-
-impl mlua::FromLua for EventKind {
-    fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
-        match value {
-            mlua::Value::UserData(ud) => {
-                let borrowed = ud.borrow::<EventKind>()?;
-                Ok(borrowed.clone())
-            }
-            _ => Err(mlua::Error::FromLuaConversionError {
-                from: value.type_name(),
-                to: "EventKind".into(),
-                message: Some("expected EventKind userdata".into()),
-            }),
-        }
     }
 }

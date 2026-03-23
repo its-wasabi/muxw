@@ -18,6 +18,18 @@ impl Muxw {
         #[cfg(debug_assertions)]
         {
             here!("First config state: {:#?}", config.load());
+
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                let pending = config_handle.event(Box::new(
+                    crate::config::api::event::input::keyboard::InputKeyboardEventKind::Added {
+                        keyboard: Default::default(),
+                        location: Default::default(),
+                    },
+                ))?;
+
+                pending.wait();
+            }
         }
 
         let display =

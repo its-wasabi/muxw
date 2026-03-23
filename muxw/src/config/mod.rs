@@ -21,9 +21,13 @@ pub struct Config {
 pub struct SharedConfig(std::sync::Arc<arc_swap::ArcSwap<Config>>);
 
 pub enum ConfigRequest {
-    Reload { path: Option<std::path::PathBuf> },
+    Reload {
+        path: Option<std::path::PathBuf>,
+    },
     Clear,
-    Event { event: api::event::EventKind },
+    Event {
+        event: Box<dyn api::event::ErasedEventKind>,
+    },
 }
 
 struct ConfigMessage {
@@ -92,7 +96,7 @@ impl ConfigHandle {
 
     pub fn event(
         &self,
-        event: api::event::EventKind,
+        event: Box<dyn api::event::ErasedEventKind>,
     ) -> Result<PendingConfigRequest, crate::error::InitError> {
         self.dispatch(ConfigRequest::Event { event })
     }
@@ -232,14 +236,13 @@ impl ConfigContext {
             // TODO: Move the handlers of each request to related config file maybe make handling
             // these a trait
             ConfigRequest::Event { event } => {
-                here!("Fired an event: {event:?}");
                 self.lua
                     .app_data_mut::<api::event::EventRegistry>()
                     .ok_or(crate::error::InitError::Mlua {
                         action: "event manager not initialized",
                     })?
                     // FIX: Change that 0.0 into actual timestamp
-                    .fire(&self.lua, event, 0.0)
+                    .fire(&self.lua, &(*event), 0.0)
                     .map_err(|_| crate::error::InitError::Mlua {
                         action: "dispatch event to lua handler",
                     })
