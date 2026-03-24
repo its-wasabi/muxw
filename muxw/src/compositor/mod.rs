@@ -16,39 +16,7 @@ impl Muxw {
             crate::config::ConfigContext::spawn(&crate::PATH.config_file)?;
 
         #[cfg(debug_assertions)]
-        {
-            here!("First config state: {:#?}", config.load());
-
-            loop {
-                std::thread::sleep(std::time::Duration::from_secs(2));
-                // let pending1 = config_handle.event(Box::new(
-                //     crate::config::api::event::input::keyboard::InputKeyboardEventKind::Added {
-                //         keyboard: Default::default(),
-                //         location: Default::default(),
-                //     },
-                // ))?;
-                //
-                // let pending3 = config_handle.event(Box::new(
-                //     crate::config::api::event::input::keyboard::InputKeyboardEventKind::Removed {
-                //         location: Default::default(),
-                //     },
-                // ))?;
-
-                let pending2 = config_handle.event(Box::new(
-                    crate::config::api::event::input::keyboard::InputKeyboardEventKind::Inactivity {
-                        keyboard: Default::default(),
-                        location: Default::default(),
-                        timeout_secs: None 
-                    },
-                ))?;
-
-                // pending1.wait();
-                pending2.wait();
-                // pending3.wait();
-
-                here!("After events: {:#?}", config.load());
-            }
-        }
+        here!("First config state: {:#?}", config.load());
 
         let display =
             wayland_server::Display::new().map_err(|err| crate::error::InitError::Wayland {
@@ -56,13 +24,12 @@ impl Muxw {
                 source: err,
             })?;
 
+        let 
+
         Ok(Self { display, config })
     }
 }
 
-// pub struct Socket {}
-//
-// // NOTE: Read that
 // // pub fn new_auto() -> Result<ListeningSocketSource, BindError> {
 // //     // Try socket numbers 1-32. Remember the upper bound of Range is exclusive.
 // //     //
