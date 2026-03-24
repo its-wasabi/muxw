@@ -36,38 +36,26 @@ impl<ID: Id> IdSource<ID> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct DeviceId(u64);
-impl Id for DeviceId {
-    fn new(id: u64) -> Self {
-        Self(id)
-    }
+macro_rules! define_id {
+    ($name:ident) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        pub struct $name(u64);
 
-    fn inner(&self) -> u64 {
-        self.0
-    }
+        impl Id for $name {
+            #[inline]
+            fn new(id: u64) -> Self {
+                Self(id)
+            }
+
+            #[inline]
+            fn inner(&self) -> u64 {
+                self.0
+            }
+        }
+    };
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct WindowId(u64);
-impl Id for WindowId {
-    fn new(id: u64) -> Self {
-        Self(id)
-    }
-
-    fn inner(&self) -> u64 {
-        self.0
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct OutputId(u64);
-impl Id for OutputId {
-    fn new(id: u64) -> Self {
-        Self(id)
-    }
-
-    fn inner(&self) -> u64 {
-        self.0
-    }
-}
+define_id!(DeviceId);
+define_id!(OutputId);
+define_id!(WindowId);
+define_id!(EventId);
