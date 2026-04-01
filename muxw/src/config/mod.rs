@@ -1,30 +1,29 @@
-// TODO: Create Config Delta which is basically a list of config changes starting from last check
-// Make that delta enum so you can match over what to reconfigure
-// 1. You call config.delta() -> () & self.clear()
-// 2. Config A B Y updated
-// 3. Config.delta() -> [A,B,C] & self.clear()
-//
-// IMPORTANT: Instead of making it watch for changes link systems directly to the config parts in
-// the way that systems when created automatically links itself to some config part like keyboard
-// config builder and then the part of the config like keyboard config is applied it calls that
-// system for action
-
 #![allow(clippy::unwrap_used)]
 use crate::config::api::event;
 
 pub mod api;
 
-#[derive(Debug, Default, Clone)]
 pub struct Config {
-    pub keyboard_xkb: std::collections::HashMap<
-        muxw_types::input::DeviceLocation,
-        muxw_types::input::keyboard::Config,
-    >,
+    lua: mlua::Lua,
+    path: std::path::PathBuf,
+
+    command: std::sync::mpsc::Receiver<Box<dyn muxw_types::config::ConfigCommand>>,
+    event: std::sync::mpsc::Sender<Box<dyn muxw_types::config::ConfigEvent>>,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct SharedConfig(std::sync::Arc<arc_swap::ArcSwap<Config>>);
+impl Config {
+    pub fn new(
+        path: &std::path::Path,
+    ) -> (
+        std::sync::mpsc::Sender<Box<dyn muxw_types::config::ConfigCommand>>,
+        std::sync::mpsc::Receiver<Box<dyn muxw_types::config::ConfigEvent>>,
+    ) {
+        todo!()
+    }
+}
 
+/*
+// TODO: Change that to some CoreCommands
 pub enum ConfigRequest {
     Reload {
         path: Option<std::path::PathBuf>,
@@ -318,3 +317,4 @@ fn mutate_config(lua: &mlua::Lua, f: impl FnOnce(&mut Config)) -> mlua::Result<(
         .mutate(f);
     Ok(())
 }
+*/

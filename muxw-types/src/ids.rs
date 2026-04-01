@@ -1,3 +1,6 @@
+// TODO: Try to finding some way of sourcing ids without wasting so much memory for free list and
+// keeping the O(1) acquire and release
+
 pub trait Id {
     fn new(id: u64) -> Self;
     fn inner(&self) -> u64;
@@ -59,3 +62,4 @@ define_id!(DeviceId);
 define_id!(OutputId);
 define_id!(WindowId);
 define_id!(EventId);
+define_id!(EpollEventTokenId);

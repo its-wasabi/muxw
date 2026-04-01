@@ -4,5 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+muxw-types = {path = "../muxw-types/"}
+
 bitflags = "2.11.0"
 libc = "0.2.182"

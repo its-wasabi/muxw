@@ -93,4 +93,6 @@ fn main() {
     }
 
     let mut muxw = compositor::Muxw::new().expect("err");
+
+    muxw.run();
 }
