@@ -1,4 +1,5 @@
 #![allow(unused)]
+#![allow(dead_code)]
 
 macro_rules! here {
     () => {
@@ -72,14 +73,15 @@ mod cli;
 mod compositor;
 mod config;
 mod error;
+mod event_loop;
 mod input;
 mod path;
 
-fn main() {
+fn main() -> Result<(), i32> {
     use clap::Parser;
     let cli = cli::Cli::parse();
     match exit_on_error(cli.handle(), 1) {
-        cli::CliHandleOutcome::Exit => return,
+        cli::CliHandleOutcome::Exit => return Ok(()),
         cli::CliHandleOutcome::Continue => (),
     }
     let path = exit_on_error(path::Path::new(&cli), 1);
@@ -92,7 +94,10 @@ fn main() {
         here!("{PATH:#?}");
     }
 
-    let mut muxw = compositor::Muxw::new().expect("err");
+    let mut event_loop = event_loop::EventLoop::new(true).map_err(|_| 12)?;
+    let mut compositr = compositor::Compositor::new(&mut event_loop).map_err(|_| 22)?;
 
-    muxw.run();
+    event_loop.run(&mut compositr);
+
+    Ok(())
 }

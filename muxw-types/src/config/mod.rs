@@ -1,5 +1,8 @@
 /// When other threads require something from the config
-pub trait ConfigCommand {}
+
+pub enum ConfigCommand {
+    Reload,
+}
 
 /// When config requires other threads to do something
-pub trait ConfigEvent {}
+pub trait ConfigEvent: Send + 'static {}

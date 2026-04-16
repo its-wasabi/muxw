@@ -1,30 +1,29 @@
 use std::os::fd::{AsFd, AsRawFd};
 
-pub struct Muxw {
-    event_loop: muxw_event_loop::EventLoop,
+pub struct Compositor {
     display: wayland_server::Display<Self>,
+    config_command: std::rc::Rc<crate::config::CommandHandle>,
 }
 
-impl Muxw {
-    pub fn new() -> Result<Self, crate::error::InitError> {
-        let mut event_loop = muxw_event_loop::EventLoop::new().unwrap();
+impl Compositor {
+    pub fn new(
+        event_loop: &mut crate::event_loop::EventLoop,
+    ) -> Result<Self, crate::error::InitError> {
+        let (config_command, config_event_rx) =
+            crate::config::Config::spawn(&crate::PATH.config_file)?;
+        event_loop.register(crate::event_loop::Source::Config(config_event_rx));
 
-        let (config_command, config_event) = crate::config::Config::new(&crate::PATH.config_file);
-        event_loop.register(muxw_event_loop::Event::Config(config_event));
-
-        let mut display = wayland_server::Display::new().unwrap();
-        let wayland_event = display.backend().poll_fd().as_raw_fd();
-        event_loop.register(muxw_event_loop::Event::Wayland(wayland_event));
+        let mut display =
+            wayland_server::Display::new().map_err(|err| crate::error::InitError::Wayland {
+                action: "create display",
+                source: err,
+            })?;
+        let wayland_event_fd = display.backend().poll_fd().as_raw_fd();
+        event_loop.register(crate::event_loop::Source::Wayland(wayland_event_fd));
 
         Ok(Self {
-            event_loop,
             display,
+            config_command,
         })
-    }
-
-    pub fn run(&mut self) {
-        while let event = self.event_loop.dispatch() {
-            todo!("Handle that event");
-        }
     }
 }

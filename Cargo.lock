@@ -555,6 +555,7 @@ version = "0.1.0"
 dependencies = [
  "arc-swap",
  "ash",
+ "bitflags",
  "calloop",
  "clap",
  "clap_complete",
@@ -564,7 +565,6 @@ dependencies = [
  "input",
  "libc",
  "mlua",
- "muxw-event-loop",
  "muxw-types",
  "serde",
  "udev",
@@ -572,15 +572,6 @@ dependencies = [
  "wayland-protocols",
  "wayland-server",
  "xkbcommon",
-]
-
-[[package]]
-name = "muxw-event-loop"
-version = "0.1.0"
-dependencies = [
- "bitflags",
- "libc",
- "muxw-types",
 ]
 
 [[package]]

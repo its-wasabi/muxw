@@ -1,179 +1,131 @@
-#![allow(clippy::unwrap_used)]
-use crate::config::api::event;
-
-pub mod api;
+// pub mod api;
 
 pub struct Config {
     lua: mlua::Lua,
     path: std::path::PathBuf,
 
-    command: std::sync::mpsc::Receiver<Box<dyn muxw_types::config::ConfigCommand>>,
-    event: std::sync::mpsc::Sender<Box<dyn muxw_types::config::ConfigEvent>>,
+    command: std::sync::mpsc::Receiver<CommandMessage>,
+    event: std::sync::mpsc::SyncSender<Box<dyn muxw_types::config::ConfigEvent>>,
 }
 
-impl Config {
-    pub fn new(
-        path: &std::path::Path,
-    ) -> (
-        std::sync::mpsc::Sender<Box<dyn muxw_types::config::ConfigCommand>>,
-        std::sync::mpsc::Receiver<Box<dyn muxw_types::config::ConfigEvent>>,
-    ) {
-        todo!()
-    }
-}
+// IMPORTANT: Try to figure out some other way
+/// # Unsafe
+/// Send is required on struct with non send fields because struct need to be hand over to the
+/// config thread once created, it is safe because after initialization no operation is done on the
+/// struct data until config loop is ran already inside thread
+#[allow(clippy::non_send_fields_in_send_ty)]
+unsafe impl Send for Config {}
 
-/*
-// TODO: Change that to some CoreCommands
-pub enum ConfigRequest {
-    Reload {
-        path: Option<std::path::PathBuf>,
-    },
-    Clear,
-    Event {
-        event: Box<dyn api::event::ErasedEventKind>,
-    },
-}
+pub struct PendingCommand(std::sync::mpsc::Receiver<Result<(), crate::error::InitError>>);
 
-struct ConfigMessage {
-    request: ConfigRequest,
-    done: std::sync::mpsc::SyncSender<Result<(), crate::error::InitError>>,
-}
-
-#[derive(Debug)]
-pub struct ConfigHandle(std::sync::mpsc::SyncSender<ConfigMessage>);
-
-#[derive(Debug)]
-pub struct PendingConfigRequest(std::sync::mpsc::Receiver<Result<(), crate::error::InitError>>);
-
-struct ConfigState {
-    local: Config,
-    shared: SharedConfig,
-}
-
-pub struct ConfigContext {
-    lua: mlua::Lua,
-    path: std::path::PathBuf,
-    shared: SharedConfig,
-    event_rx: std::sync::mpsc::Receiver<ConfigMessage>,
-}
-
-impl SharedConfig {
-    fn store(&self, config: std::sync::Arc<Config>) {
-        self.0.store(config);
-    }
-
-    pub fn load(&self) -> arc_swap::Guard<std::sync::Arc<Config>> {
-        self.0.load()
-    }
-}
-
-impl ConfigState {
-    fn new(shared: SharedConfig) -> Self {
-        Self {
-            local: Config::default(),
-            shared,
-        }
-    }
-
-    fn mutate(&mut self, f: impl FnOnce(&mut Config)) {
-        f(&mut self.local);
-        self.shared.store(std::sync::Arc::new(self.local.clone()));
-    }
-
-    fn clear(&mut self) {
-        self.local = Config::default();
-        self.shared.store(std::sync::Arc::new(Config::default()));
-    }
-}
-
-impl ConfigHandle {
-    pub fn reload(
-        &self,
-        path: Option<std::path::PathBuf>,
-    ) -> Result<PendingConfigRequest, crate::error::InitError> {
-        self.dispatch(ConfigRequest::Reload { path })
-    }
-
-    pub fn clear(&self) -> Result<PendingConfigRequest, crate::error::InitError> {
-        self.dispatch(ConfigRequest::Clear)
-    }
-
-    pub fn event(
-        &self,
-        event: Box<dyn api::event::ErasedEventKind>,
-    ) -> Result<PendingConfigRequest, crate::error::InitError> {
-        self.dispatch(ConfigRequest::Event { event })
-    }
-
-    fn dispatch(
-        &self,
-        request: ConfigRequest,
-    ) -> Result<PendingConfigRequest, crate::error::InitError> {
-        let (done, done_rx) = std::sync::mpsc::sync_channel(1);
-
-        self.0
-            .send(ConfigMessage { request, done })
-            .map_err(|err| crate::error::InitError::Io {
-                action: "send config event",
-                path: None,
-                source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
-            })?;
-        Ok(PendingConfigRequest(done_rx))
-    }
-}
-
-impl PendingConfigRequest {
+impl PendingCommand {
     pub fn wait(self) -> Result<(), crate::error::InitError> {
-        self.0.recv().map_err(|err| crate::error::InitError::Io {
-            action: "config thread died before completing operation",
+        self.0.recv().map_err(|_| crate::error::InitError::Io {
+            action: "config thread died before completing command",
             path: None,
             source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
         })?
     }
 }
 
-impl ConfigContext {
-    pub fn spawn(
-        path: &std::path::Path,
-    ) -> Result<(ConfigHandle, SharedConfig), crate::error::InitError> {
-        let shared = crate::config::SharedConfig::default();
+type CommandMessage = (
+    muxw_types::config::ConfigCommand,
+    std::sync::mpsc::SyncSender<Result<(), crate::error::InitError>>,
+);
 
-        // TODO: Check if you should use sync_channel or channel
-        let (msg_tx, msg_rx) = std::sync::mpsc::sync_channel(0);
-        let (init_tx, init_rx) =
-            std::sync::mpsc::sync_channel::<Result<(), crate::error::InitError>>(0);
+pub struct CommandHandle(std::sync::mpsc::SyncSender<CommandMessage>);
 
-        std::thread::Builder::new()
-            .name("config".into())
-            .spawn({
-                let path = path.to_owned();
-                let shared = shared.clone();
-
-                move || match Self::init(path, msg_rx, shared) {
-                    Ok(context) => {
-                        init_tx.send(Ok(())).unwrap();
-                        Self::run(context);
-                    }
-                    Err(err) => {
-                        init_tx.send(Err(err)).unwrap();
-                    }
-                }
-            })
-            .map_err(|err| crate::error::InitError::Io {
-                action: "spawn config thread",
+impl CommandHandle {
+    pub fn send(
+        &self,
+        command: muxw_types::config::ConfigCommand,
+    ) -> Result<PendingCommand, crate::error::InitError> {
+        let (done_tx, done_rx) = std::sync::mpsc::sync_channel(1);
+        self.0
+            .send((command, done_tx))
+            .map_err(|error| crate::error::InitError::Io {
+                action: "send command to config thread",
                 path: None,
-                source: err,
+                source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
             })?;
 
-        init_rx.recv().map_err(|_| crate::error::InitError::Io {
-            action: "config thread died during init",
-            path: None,
-            source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
-        })??;
+        Ok(PendingCommand(done_rx))
+    }
+}
 
-        Ok((ConfigHandle(msg_tx), shared))
+impl Config {
+    pub fn spawn(
+        path: &std::path::Path,
+    ) -> Result<
+        (
+            std::rc::Rc<CommandHandle>,
+            std::sync::mpsc::Receiver<Box<dyn muxw_types::config::ConfigEvent>>,
+        ),
+        crate::error::InitError,
+    > {
+        let (command_tx, command_rx) = std::sync::mpsc::sync_channel::<CommandMessage>(10);
+        let command_handle = CommandHandle(command_tx);
+        let (event_tx, event_rx) =
+            std::sync::mpsc::sync_channel::<Box<dyn muxw_types::config::ConfigEvent>>(10);
+
+        let _ = std::thread::Builder::new()
+            .name("config".into())
+            .spawn({
+                let config = Self::new(path, command_rx, event_tx)?;
+
+                move || config.run()
+            })
+            .map_err(|_| crate::error::InitError::Io {
+                action: "create thread",
+                path: None,
+                source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
+            })?;
+
+        Ok((std::rc::Rc::new(command_handle), event_rx))
     }
 
+    fn new(
+        path: &std::path::Path,
+        command: std::sync::mpsc::Receiver<CommandMessage>,
+        event: std::sync::mpsc::SyncSender<Box<dyn muxw_types::config::ConfigEvent>>,
+    ) -> Result<Self, crate::error::InitError> {
+        let libs = mlua::StdLib::TABLE
+            | mlua::StdLib::MATH
+            | mlua::StdLib::STRING
+            | mlua::StdLib::IO
+            | mlua::StdLib::OS;
+        let options = mlua::LuaOptions::default();
+
+        let lua = mlua::Lua::new_with(libs, options)
+            .map_err(|err| crate::error::InitError::Mlua { action: "init lua" })?;
+
+        let path = path.to_owned();
+
+        Ok(Self {
+            lua,
+            path,
+            command,
+            event,
+        })
+    }
+
+    fn run(self) {
+        while let command_message = self.command.recv() {
+            let command_message = command_message.unwrap();
+            let command = command_message.0;
+            let done_tx = command_message.1;
+
+            match command {
+                muxw_types::config::ConfigCommand::Reload => {
+                    here!("RELOAD");
+                }
+            }
+        }
+    }
+}
+
+/*
+impl ConfigContext {
     fn init(
         path: std::path::PathBuf,
         event_rx: std::sync::mpsc::Receiver<ConfigMessage>,
@@ -310,6 +262,106 @@ impl ConfigContext {
         std::fs::write(path, crate::DEFAULT_CONFIG)
     }
 }
+*/
+/*
+struct ConfigMessage {
+    request: ConfigRequest,
+    done: std::sync::mpsc::SyncSender<Result<(), crate::error::InitError>>,
+}
+
+#[derive(Debug)]
+pub struct ConfigHandle(std::sync::mpsc::SyncSender<ConfigMessage>);
+
+#[derive(Debug)]
+pub struct PendingConfigRequest(std::sync::mpsc::Receiver<Result<(), crate::error::InitError>>);
+
+struct ConfigState {
+    local: Config,
+    shared: SharedConfig,
+}
+
+pub struct ConfigContext {
+    lua: mlua::Lua,
+    path: std::path::PathBuf,
+    shared: SharedConfig,
+    event_rx: std::sync::mpsc::Receiver<ConfigMessage>,
+}
+
+impl SharedConfig {
+    fn store(&self, config: std::sync::Arc<Config>) {
+        self.0.store(config);
+    }
+
+    pub fn load(&self) -> arc_swap::Guard<std::sync::Arc<Config>> {
+        self.0.load()
+    }
+}
+
+impl ConfigState {
+    fn new(shared: SharedConfig) -> Self {
+        Self {
+            local: Config::default(),
+            shared,
+        }
+    }
+
+    fn mutate(&mut self, f: impl FnOnce(&mut Config)) {
+        f(&mut self.local);
+        self.shared.store(std::sync::Arc::new(self.local.clone()));
+    }
+
+    fn clear(&mut self) {
+        self.local = Config::default();
+        self.shared.store(std::sync::Arc::new(Config::default()));
+    }
+}
+
+impl ConfigHandle {
+    pub fn reload(
+        &self,
+        path: Option<std::path::PathBuf>,
+    ) -> Result<PendingConfigRequest, crate::error::InitError> {
+        self.dispatch(ConfigRequest::Reload { path })
+    }
+
+    pub fn clear(&self) -> Result<PendingConfigRequest, crate::error::InitError> {
+        self.dispatch(ConfigRequest::Clear)
+    }
+
+    pub fn event(
+        &self,
+        event: Box<dyn api::event::ErasedEventKind>,
+    ) -> Result<PendingConfigRequest, crate::error::InitError> {
+        self.dispatch(ConfigRequest::Event { event })
+    }
+
+    fn dispatch(
+        &self,
+        request: ConfigRequest,
+    ) -> Result<PendingConfigRequest, crate::error::InitError> {
+        let (done, done_rx) = std::sync::mpsc::sync_channel(1);
+
+        self.0
+            .send(ConfigMessage { request, done })
+            .map_err(|err| crate::error::InitError::Io {
+                action: "send config event",
+                path: None,
+                source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
+            })?;
+        Ok(PendingConfigRequest(done_rx))
+    }
+}
+
+impl PendingConfigRequest {
+    pub fn wait(self) -> Result<(), crate::error::InitError> {
+        self.0.recv().map_err(|err| crate::error::InitError::Io {
+            action: "config thread died before completing operation",
+            path: None,
+            source: std::io::Error::from(std::io::ErrorKind::BrokenPipe),
+        })?
+    }
+}
+
 
 fn mutate_config(lua: &mlua::Lua, f: impl FnOnce(&mut Config)) -> mlua::Result<()> {
     lua.app_data_mut::<ConfigState>()

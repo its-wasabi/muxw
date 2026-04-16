@@ -2,7 +2,6 @@
 resolver = "3"
 members = [
 	"muxw",
-	"muxw-event-loop",
 	"muxw-types",
 ]
 
