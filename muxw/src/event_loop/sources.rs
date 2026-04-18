@@ -1,5 +1,14 @@
 use std::os::fd::RawFd;
 
+// bitflags::bitflags! {
+//     pub struct Source: u32 {
+//     const Wayland(RawFd),
+//     const Input(RawFd),
+//     const Config(std::sync::mpsc::Receiver<Box<dyn muxw_types::config::ConfigEvent>>),
+//
+//     }
+// }
+
 pub enum Source {
     Wayland(RawFd),
     Input(RawFd),

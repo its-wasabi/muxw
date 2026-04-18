@@ -1,6 +1,8 @@
 #![allow(clippy::todo)]
 #![allow(clippy::unwrap_used)]
 
+use muxw_types::config::ConfigApiEvent;
+
 use crate::config::api::event;
 
 pub mod input;
@@ -33,19 +35,19 @@ pub fn create_event_table(lua: &mlua::Lua) -> Result<mlua::Table, crate::error::
                     }
                 };
 
-                let tag = tag.borrow::<EventTag>()?;
-
-                if !tag.0.is_callable_ready() {
+                // create custom tag type that will hold variant of command
+                let tag = tag.borrow::<muxw_types::config::EventDiscriminant>()?;
+                if !tag.is_ready() {
                     return Err(mlua::Error::runtime(format!(
-                        "event tag {} requires arguments, call it first",
-                        tag.0.tag_name(),
+                        "event tag {:?} requires argument(s) - call it first (e.g.: inactive(0.8))",
+                        tag
                     )));
                 }
 
                 let mut registry = lua
                     .app_data_mut::<EventRegistry>()
                     .ok_or_else(|| mlua::Error::runtime("Registry not initialized"))?;
-                let id = registry.register(lua, tag.0.clone_box(), callback)?;
+                let id = registry.register(lua, tag.clone(), callback)?;
 
                 Ok(id)
             })
@@ -72,51 +74,45 @@ pub fn create_event_table(lua: &mlua::Lua) -> Result<mlua::Table, crate::error::
     Ok(event_table)
 }
 
+// NOTE: FxBuildHasher is for non cryptographic hashing
+#[derive(multi_index_map::MultiIndexMap, Debug)]
+#[multi_index_derive(Debug)]
+#[multi_index_hash(rustc_hash::FxBuildHasher)]
+pub struct Event {
+    #[multi_index(hashed_unique)]
+    id: muxw_types::ids::Id,
+    #[multi_index(hashed_non_unique)]
+    discriminant: muxw_types::config::EventDiscriminant,
+
+    registry_key: mlua::RegistryKey,
+}
+
 #[derive(Default)]
 pub struct EventRegistry {
-    next_id: EventId,
-    entries: std::collections::HashMap<EventId, RegisteredEvent>,
-}
-
-struct RegisteredEvent {
-    tag: Box<dyn ErasedEventKind>,
-    callback_key: mlua::RegistryKey,
-}
-
-pub type EventId = u64;
-
-pub struct EventTag(pub Box<dyn ErasedEventKind>);
-
-pub trait ErasedEventKind: Send + Sync {
-    fn matches(&self, other: &dyn ErasedEventKind) -> bool;
-    fn populate_event_table(&self, event: &mlua::Table, lua: &mlua::Lua) -> mlua::Result<()>;
-    fn as_any(&self) -> &dyn std::any::Any;
-    fn clone_box(&self) -> Box<dyn ErasedEventKind>;
-    fn tag_name(&self) -> &'static str;
-    fn is_callable_ready(&self) -> bool;
-    fn call_with_args(
-        &self,
-        lua: &mlua::Lua,
-        args: mlua::MultiValue,
-    ) -> mlua::Result<mlua::AnyUserData>;
+    id_source: muxw_types::ids::IdSource,
+    events: MultiIndexEventMap,
 }
 
 impl EventRegistry {
+    pub fn new() -> Self {
+        Self {
+            id_source: muxw_types::ids::IdSource::new(),
+            events: MultiIndexEventMap::default(),
+        }
+    }
+
     pub fn register(
         &mut self,
         lua: &mlua::Lua,
-        tag: Box<dyn ErasedEventKind>,
+        discriminant: muxw_types::config::EventDiscriminant,
         callback: mlua::Function,
-    ) -> mlua::Result<EventId> {
-        let id = self.next_id;
-        self.next_id += 1;
-        self.entries.insert(
+    ) -> mlua::Result<muxw_types::ids::Id> {
+        let id = self.id_source.acquire();
+        self.events.insert(Event {
             id,
-            RegisteredEvent {
-                tag,
-                callback_key: lua.create_registry_value(callback)?,
-            },
-        );
+            discriminant,
+            registry_key: lua.create_registry_value(callback)?,
+        });
 
         Ok(id)
     }
@@ -124,47 +120,29 @@ impl EventRegistry {
     pub fn fire(
         &self,
         lua: &mlua::Lua,
-        event: &dyn ErasedEventKind,
+        command: muxw_types::config::ConfigCommand,
         timestamp: f64,
     ) -> mlua::Result<()> {
-        let matching: Vec<&mlua::RegistryKey> = self
-            .entries
-            .values()
-            // TODO: check why calling .as_ref() additionally removed error
-            .filter(|ev| event.matches(ev.tag.as_ref()))
-            .map(|ev| &ev.callback_key)
-            .collect();
-
-        for key in matching {
-            let event_table = lua.create_table()?;
-            event_table.set("timestamp", timestamp)?;
-            event.populate_event_table(&event_table, lua)?;
-            let callback: mlua::Function = lua.registry_value(key)?;
-            callback.call::<()>(event_table)?;
+        let events = self.events.get_by_discriminant(&command.discriminant());
+        for event in events {
+            let callback: mlua::Function = lua.registry_value(&event.registry_key)?;
+            let context = lua.create_table().unwrap();
+            command.create_context(&context);
+            callback.call::<()>(context);
         }
 
         Ok(())
     }
 
-    pub fn unregister(&mut self, lua: &mlua::Lua, id: EventId) -> mlua::Result<()> {
-        if let Some(entry) = self.entries.remove(&id) {
-            lua.remove_registry_value(entry.callback_key)?;
+    pub fn unregister(&mut self, lua: &mlua::Lua, id: muxw_types::ids::Id) {
+        let event = self.events.remove_by_id(&id);
+        // TODO: Check if that works nicely and also check if it's possible to get Null variant here
+        if let Some(event) = event {
+            lua.remove_registry_value(event.registry_key);
         }
-
-        Ok(())
     }
 
     pub fn clear(&mut self) {
-        self.entries.clear();
-    }
-}
-
-impl mlua::UserData for EventTag {
-    fn add_fields<F: mlua::UserDataFields<Self>>(fields: &mut F) {}
-    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_meta_method(
-            mlua::MetaMethod::Call,
-            |lua, this, args: mlua::MultiValue| this.0.call_with_args(lua, args),
-        );
+        self.events.clear();
     }
 }

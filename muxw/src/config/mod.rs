@@ -5,7 +5,7 @@ pub struct Config {
     path: std::path::PathBuf,
 
     command: std::sync::mpsc::Receiver<CommandMessage>,
-    event: std::sync::mpsc::SyncSender<Box<dyn muxw_types::config::ConfigEvent>>,
+    event: std::rc::Rc<std::sync::mpsc::SyncSender<Box<dyn muxw_types::config::ConfigEvent>>>,
 }
 
 // IMPORTANT: Try to figure out some other way
@@ -97,6 +97,7 @@ impl Config {
     ) -> Result<Self, crate::error::InitError> {
         let lua = Self::load_config(path)?;
         let path = path.to_owned();
+        let event = std::rc::Rc::new(event);
 
         let mut config = Self {
             lua,
@@ -181,6 +182,14 @@ impl Config {
                     let lua = Self::load_config(&self.path).unwrap();
                     self.lua = lua;
                 }
+
+                muxw_types::config::ConfigCommand::KeyboardAdded => {
+                    let event_registry = self.lua.app_data_ref::<api::event::EventRegistry>();
+                    let event_registry = event_registry.unwrap();
+                    event_registry.fire(&self.lua, command, 0.0);
+                }
+
+                _ => todo!("Implement the rest"),
             }
         }
         Ok(())

@@ -32,8 +32,13 @@ drm = "0.14.1"
 wayland-server = { version = "0.31.10", default-features = false }
 wayland-backend = "0.3.11"
 wayland-protocols = { version = "0.32.9", features = ["server", "staging"] }
+
 arc-swap = "1.8.0"
+multi_index_map = "0.15.1"
+
 libc = "0.2.182"
 evdev = "0.13.2"
 calloop = "0.14.4"
 bitflags = "2.11.0"
+rustc-hash = "2.1.2"
+typed_floats = "1.0.7"

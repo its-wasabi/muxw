@@ -1,12 +1,14 @@
 use std::os::unix::io::RawFd;
 
+mod channel;
+// TODO: Move that later to /error/InitError or EventLoopError
 mod error;
 mod event;
 mod sources;
 
 pub use sources::Source;
 
-const INIT_EVENT_BUFFER_CAPACITY: usize = 128;
+const INIT_EVENT_BUFFER_CAPACITY: usize = 8;
 
 pub struct EventLoop {
     epoll_fd: RawFd,
