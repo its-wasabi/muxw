@@ -13,7 +13,10 @@ impl Compositor {
             crate::config::Config::spawn(&crate::PATH.config_file)?;
         event_loop.register(crate::event_loop::Source::Config(config_event_rx));
 
-        config_command.send(muxw_types::config::ConfigCommand::KeyboardAdded);
+        config_command.send(muxw_types::config::ConfigCommand::KeyboardAdded { device: () });
+        config_command.send(muxw_types::config::ConfigCommand::KeyboardInactive(
+            std::time::Duration::from_millis(1000),
+        ));
 
         let mut display =
             wayland_server::Display::new().map_err(|err| crate::error::InitError::Wayland {

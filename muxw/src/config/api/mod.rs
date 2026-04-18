@@ -1,3 +1,5 @@
+// IMPORTANT: Unify bind and event into just bind so you can bind to event or "Key+Map" into any callable
+
 pub mod event;
 pub mod input;
 

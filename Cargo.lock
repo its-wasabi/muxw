@@ -625,6 +625,7 @@ dependencies = [
  "libc",
  "mlua",
  "serde",
+ "typed_floats",
 ]
 
 [[package]]

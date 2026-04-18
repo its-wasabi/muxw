@@ -1,8 +1,6 @@
 #![allow(clippy::todo)]
 #![allow(clippy::unwrap_used)]
 
-use muxw_types::config::ConfigApiEvent;
-
 use crate::config::api::event;
 
 pub mod input;
@@ -37,17 +35,17 @@ pub fn create_event_table(lua: &mlua::Lua) -> Result<mlua::Table, crate::error::
 
                 // create custom tag type that will hold variant of command
                 let tag = tag.borrow::<muxw_types::config::EventDiscriminant>()?;
+                // NOTE: If you move that to the place where tag is required
                 if !tag.is_ready() {
                     return Err(mlua::Error::runtime(format!(
-                        "event tag {:?} requires argument(s) - call it first (e.g.: inactive(0.8))",
-                        tag
+                        "event tag {tag:?} requires argument(s) - call it first (e.g.: inactive(0.8))"
                     )));
                 }
 
                 let mut registry = lua
                     .app_data_mut::<EventRegistry>()
                     .ok_or_else(|| mlua::Error::runtime("Registry not initialized"))?;
-                let id = registry.register(lua, tag.clone(), callback)?;
+                let id = registry.register(lua, *tag, callback)?;
 
                 Ok(id)
             })
@@ -74,7 +72,6 @@ pub fn create_event_table(lua: &mlua::Lua) -> Result<mlua::Table, crate::error::
     Ok(event_table)
 }
 
-// NOTE: FxBuildHasher is for non cryptographic hashing
 #[derive(multi_index_map::MultiIndexMap, Debug)]
 #[multi_index_derive(Debug)]
 #[multi_index_hash(rustc_hash::FxBuildHasher)]
@@ -120,15 +117,14 @@ impl EventRegistry {
     pub fn fire(
         &self,
         lua: &mlua::Lua,
-        command: muxw_types::config::ConfigCommand,
-        timestamp: f64,
+        command: &muxw_types::config::ConfigCommand,
     ) -> mlua::Result<()> {
         let events = self.events.get_by_discriminant(&command.discriminant());
         for event in events {
             let callback: mlua::Function = lua.registry_value(&event.registry_key)?;
             let context = lua.create_table().unwrap();
-            command.create_context(&context);
-            callback.call::<()>(context);
+            command.create_context(&context)?;
+            callback.call::<()>(context)?;
         }
 
         Ok(())

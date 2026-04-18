@@ -12,7 +12,7 @@ use std::os::fd::RawFd;
 pub enum Source {
     Wayland(RawFd),
     Input(RawFd),
-    Config(std::sync::mpsc::Receiver<Box<dyn muxw_types::config::ConfigEvent>>),
+    Config(std::sync::mpsc::Receiver<muxw_types::config::ConfigEvent>),
 }
 
 impl Source {

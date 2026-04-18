@@ -5,7 +5,7 @@ pub struct Config {
     path: std::path::PathBuf,
 
     command: std::sync::mpsc::Receiver<CommandMessage>,
-    event: std::rc::Rc<std::sync::mpsc::SyncSender<Box<dyn muxw_types::config::ConfigEvent>>>,
+    event: std::rc::Rc<std::sync::mpsc::SyncSender<muxw_types::config::ConfigEvent>>,
 }
 
 // IMPORTANT: Try to figure out some other way
@@ -65,14 +65,14 @@ impl Config {
     ) -> Result<
         (
             std::rc::Rc<CommandHandle>,
-            std::sync::mpsc::Receiver<Box<dyn muxw_types::config::ConfigEvent>>,
+            std::sync::mpsc::Receiver<muxw_types::config::ConfigEvent>,
         ),
         crate::error::InitError,
     > {
         let (command_tx, command_rx) = std::sync::mpsc::sync_channel::<CommandMessage>(10);
         let command_handle = CommandHandle(command_tx);
         let (event_tx, event_rx) =
-            std::sync::mpsc::sync_channel::<Box<dyn muxw_types::config::ConfigEvent>>(10);
+            std::sync::mpsc::sync_channel::<muxw_types::config::ConfigEvent>(10);
 
         let _ = std::thread::Builder::new()
             .name("config".into())
@@ -93,7 +93,7 @@ impl Config {
     fn new(
         path: &std::path::Path,
         command: std::sync::mpsc::Receiver<CommandMessage>,
-        event: std::sync::mpsc::SyncSender<Box<dyn muxw_types::config::ConfigEvent>>,
+        event: std::sync::mpsc::SyncSender<muxw_types::config::ConfigEvent>,
     ) -> Result<Self, crate::error::InitError> {
         let lua = Self::load_config(path)?;
         let path = path.to_owned();
@@ -183,13 +183,25 @@ impl Config {
                     self.lua = lua;
                 }
 
-                muxw_types::config::ConfigCommand::KeyboardAdded => {
+                muxw_types::config::ConfigCommand::KeyboardAdded { .. } => {
                     let event_registry = self.lua.app_data_ref::<api::event::EventRegistry>();
                     let event_registry = event_registry.unwrap();
-                    event_registry.fire(&self.lua, command, 0.0);
+                    event_registry.fire(&self.lua, &command);
                 }
 
-                _ => todo!("Implement the rest"),
+                muxw_types::config::ConfigCommand::KeyboardInactive(time)
+                    if time == std::time::Duration::from_millis(1000) =>
+                {
+                    let event_registry = self.lua.app_data_ref::<api::event::EventRegistry>();
+                    let event_registry = event_registry.unwrap();
+                    event_registry.fire(&self.lua, &command);
+                }
+
+                other => {
+                    here!(
+                        "IMPORTANT({other:?}): Code is unimplemented yet (this is here only to make that compile)"
+                    )
+                }
             }
         }
         Ok(())
