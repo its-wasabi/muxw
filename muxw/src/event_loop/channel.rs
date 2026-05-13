@@ -1,59 +1,100 @@
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+use std::{
+    collections::VecDeque,
+    io,
+    os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd},
+    sync::{Arc, Mutex},
+};
 
-fn create_eventfd() -> super::error::Result<OwnedFd> {
-    Ok(unsafe {
-        OwnedFd::from_raw_fd(super::error::ok_or_get_error(libc::eventfd(
-            0,
-            libc::EFD_CLOEXEC | libc::EFD_NONBLOCK,
-        ))?)
-    })
+struct Inner<T> {
+    efd: OwnedFd,
+    queue: Mutex<VecDeque<T>>,
 }
 
-// TODO: Check if .cast() is necessary
-pub(super) fn eventfd_signal(fd: RawFd) {
-    let mut val: u64 = 1;
-    unsafe { libc::write(fd, (&raw mut val).cast(), 8) };
+fn efd_create() -> io::Result<OwnedFd> {
+    let fd = unsafe { libc::eventfd(0, libc::EFD_NONBLOCK | libc::EFD_CLOEXEC) };
+    if fd < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
 }
 
-pub(super) fn eventfd_drain(fd: RawFd) -> super::error::Result<()> {
+fn efd_signal(fd: RawFd) {
+    let val: u64 = 1u64;
+    unsafe {
+        libc::write(fd, &raw const val as *const libc::c_void, 8);
+    }
+}
+
+fn efd_drain(fd: RawFd) -> io::Result<()> {
     let mut val: u64 = 0;
-    match super::error::ok_or_get_error(unsafe { libc::read(fd, (&raw mut val).cast(), 8) as i32 })
-    {
-        // TODO: Check what the fuck it wanted to do here
-        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => Err(err),
-        Err(err) => Err(err),
-        Ok(_) => Ok(()),
+    let ret = unsafe { libc::read(fd, &raw mut val as *mut libc::c_void, 8) as i32 };
+    if ret < 0 {
+        let err = io::Error::last_os_error();
+        if err.kind() == io::ErrorKind::WouldBlock {
+            return Ok(());
+        }
+        return Err(err);
+    }
+    Ok(())
+}
+
+pub struct Sender<T> {
+    inner: Arc<Inner<T>>,
+}
+
+impl<T> Sender<T> {
+    pub fn send(&self, value: T) {
+        {
+            self.inner.queue.lock().unwrap().push_back(value);
+        }
+        efd_signal(self.inner.efd.as_raw_fd());
     }
 }
 
-pub struct NotifySyncSender<T> {
-    inner: std::sync::mpsc::SyncSender<T>,
-    efd: std::rc::Rc<OwnedFd>,
-}
-
-pub struct NotifyReceiver<T> {
-    pub(super) inner: std::sync::mpsc::Receiver<T>,
-    efd: std::rc::Rc<OwnedFd>,
-}
-
-impl<T: Send> NotifySyncSender<T> {
-    pub fn send(&self, msg: T) -> Result<(), std::sync::mpsc::SendError<T>> {
-        self.inner.send(msg)?;
-        eventfd_signal(self.efd.as_raw_fd());
-        Ok(())
+impl<T> Clone for Sender<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
     }
 }
 
-impl<T> NotifyReceiver<T> {
-    pub fn as_raw_fd(&self) -> RawFd {
-        self.efd.as_raw_fd()
+unsafe impl<T: Send> Send for Sender<T> {}
+unsafe impl<T: Send> Sync for Sender<T> {}
+
+pub struct Receiver<T> {
+    inner: Arc<Inner<T>>,
+}
+
+impl<T> Receiver<T> {
+    pub fn as_fd(&self) -> BorrowedFd<'_> {
+        self.inner.efd.as_fd()
     }
 
-    pub fn drain(&self, mut f: impl FnMut(T)) -> super::error::Result<()> {
-        eventfd_drain(self.efd.as_raw_fd())?;
-        while let Ok(msg) = self.inner.try_recv() {
-            f(msg);
+    pub fn drain(&self, mut f: impl FnMut(T)) -> io::Result<()> {
+        efd_drain(self.inner.efd.as_raw_fd())?;
+        let items: VecDeque<T> = {
+            let mut q = self.inner.queue.lock().unwrap();
+            std::mem::take(&mut *q)
+        };
+        for item in items {
+            f(item);
         }
         Ok(())
     }
+}
+
+unsafe impl<T: Send> Send for Receiver<T> {}
+
+pub fn channel<T: Send>() -> io::Result<(Sender<T>, Receiver<T>)> {
+    let inner = Arc::new(Inner {
+        efd: efd_create()?,
+        queue: Mutex::new(VecDeque::new()),
+    });
+    Ok((
+        Sender {
+            inner: Arc::clone(&inner),
+        },
+        Receiver { inner },
+    ))
 }

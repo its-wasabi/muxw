@@ -6,12 +6,6 @@ pub enum ConfigCommand {
     Reload,
     // TODO: Make that store actual keyboard object
     KeyboardAdded { device: () },
-    // FIX: Passing duration in a command feels like wrong move here (well systems wont listen and
-    // set inactivity notify to config thread every 0.0000000000001 second to make sure that none
-    // inactivity event is missed) try making some system that assigning inactivity event registers
-    // inactivity listener in related input manager, and make it return maybe some way to reference
-    // that inactivity callback (but not lua function that only config thread can touch) because
-    // there might be some problems with precision i think (but I'm not sure)
     // TODO: Change that to id instead of duration
     KeyboardInactive(std::time::Duration),
 }

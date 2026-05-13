@@ -5,7 +5,7 @@ pub struct Config {
     path: std::path::PathBuf,
 
     command: std::sync::mpsc::Receiver<CommandMessage>,
-    event: std::rc::Rc<std::sync::mpsc::SyncSender<muxw_types::config::ConfigEvent>>,
+    event: crate::event_loop::channel::Sender<muxw_types::config::ConfigEvent>,
 }
 
 // IMPORTANT: Try to figure out some other way
@@ -65,14 +65,19 @@ impl Config {
     ) -> Result<
         (
             std::rc::Rc<CommandHandle>,
-            std::sync::mpsc::Receiver<muxw_types::config::ConfigEvent>,
+            crate::event_loop::channel::Receiver<muxw_types::config::ConfigEvent>,
         ),
         crate::error::InitError,
     > {
         let (command_tx, command_rx) = std::sync::mpsc::sync_channel::<CommandMessage>(10);
         let command_handle = CommandHandle(command_tx);
-        let (event_tx, event_rx) =
-            std::sync::mpsc::sync_channel::<muxw_types::config::ConfigEvent>(10);
+
+        let (event_tx, event_rx) = crate::event_loop::channel::channel::<
+            muxw_types::config::ConfigEvent,
+        >()
+        .map_err(|err| crate::error::InitError::Mlua {
+            action: "NOT A MLUA",
+        })?;
 
         let _ = std::thread::Builder::new()
             .name("config".into())
@@ -93,11 +98,10 @@ impl Config {
     fn new(
         path: &std::path::Path,
         command: std::sync::mpsc::Receiver<CommandMessage>,
-        event: std::sync::mpsc::SyncSender<muxw_types::config::ConfigEvent>,
+        event: crate::event_loop::channel::Sender<muxw_types::config::ConfigEvent>,
     ) -> Result<Self, crate::error::InitError> {
         let lua = Self::load_config(path)?;
         let path = path.to_owned();
-        let event = std::rc::Rc::new(event);
 
         let mut config = Self {
             lua,

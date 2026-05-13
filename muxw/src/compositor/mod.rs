@@ -23,6 +23,7 @@ impl Compositor {
                 action: "create display",
                 source: err,
             })?;
+
         let wayland_event_fd = display.backend().poll_fd().as_raw_fd();
         event_loop.register(crate::event_loop::Source::Wayland(wayland_event_fd));
 
@@ -30,5 +31,17 @@ impl Compositor {
             display,
             config_command,
         })
+    }
+
+    pub fn handle_wayland(&self) {
+        todo!()
+    }
+
+    pub fn handle_input(&self) {
+        todo!()
+    }
+
+    pub fn handle_config_event(&self) {
+        todo!()
     }
 }
