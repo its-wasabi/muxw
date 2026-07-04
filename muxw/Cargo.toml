@@ -42,3 +42,8 @@ calloop = "0.14.4"
 bitflags = "2.11.0"
 rustc-hash = "2.1.2"
 typed_floats = "1.0.7"
+
+polling = "3.11.0"
+slab = "0.4.12"
+crossbeam-channel = "0.5.15"
+crossterm = "0.29.0"

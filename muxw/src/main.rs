@@ -73,7 +73,6 @@ mod cli;
 mod compositor;
 mod config;
 mod error;
-mod event_loop;
 mod input;
 mod path;
 
@@ -94,10 +93,7 @@ fn main() -> Result<(), i32> {
         here!("{PATH:#?}");
     }
 
-    let mut event_loop = event_loop::EventLoop::new(true).map_err(|_| 12)?;
-    let mut compositr = compositor::Compositor::new(&mut event_loop).map_err(|_| 22)?;
-
-    event_loop.run(&mut compositr);
+    let mut compositr = compositor::Compositor::new().map_err(|_| 22)?;
 
     Ok(())
 }
