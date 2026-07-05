@@ -1,3 +1,5 @@
+// TODO: Think about using IoKey & TimerKey more internally
+
 const SOURCES_DEFAULT_CAPACITY: usize = 128;
 const TIMERS_DEFAULT_CAPACITY: usize = 32;
 const CHANNELS_RX_DEFAULT_CAPACITY: usize = 8;
@@ -11,6 +13,24 @@ pub struct EventLoop<T: Copy> {
     channels_tx: Vec<crossbeam_channel::Sender<T>>,
 
     events: polling::Events,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct IoKey(usize);
+
+impl IoKey {
+    pub fn get(self) -> usize {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TimerKey(usize);
+
+impl TimerKey {
+    pub fn get(self) -> usize {
+        self.0
+    }
 }
 
 impl<T: Copy> EventLoop<T> {
@@ -31,19 +51,19 @@ impl<T: Copy> EventLoop<T> {
         source: impl polling::AsRawSource + polling::AsSource,
         mode: polling::PollMode,
         token: T,
-    ) -> std::io::Result<usize> {
+    ) -> std::io::Result<IoKey> {
         let key = self.sources.insert(TokenEntry::new_io(token, mode));
         let interest = polling::Event::readable(key);
         unsafe { self.poller.add_with_mode(source, interest, mode)? };
-        Ok(key)
+        Ok(IoKey(key))
     }
 
     pub fn deregister_source(
         &mut self,
-        key: usize,
+        key: IoKey,
         source: impl polling::AsSource,
     ) -> std::io::Result<()> {
-        if self.sources.try_remove(key).is_none() {
+        if self.sources.try_remove(key.get()).is_none() {
             return Ok(());
         }
 
@@ -56,22 +76,22 @@ impl<T: Copy> EventLoop<T> {
             })
     }
 
-    pub fn register_timer(&mut self, mode: TimerMode, token: T) -> usize {
+    pub fn register_timer(&mut self, mode: TimerMode, token: T) -> TimerKey {
         let key = self.sources.insert(TokenEntry::new_timer(token, mode));
         let timer = mode.make_timer(key);
         self.timers.push(timer);
-        key
+        TimerKey(key)
     }
 
-    // FIX: Frees the key that lazily removed timer used. Idk but slab might reuse that for
-    // registering new source and the timers handling part of dispatch function will get wrong source
-    pub fn lazy_deregister_timer(&mut self, key: usize) {
-        self.sources.try_remove(key);
+    pub fn lazy_deregister_timer(&mut self, key: TimerKey) {
+        if let Some(entry) = self.sources.get_mut(key.get()) {
+            entry.kind = EntryKind::Dead;
+        }
     }
 
-    pub fn deregister_timer(&mut self, key: usize) {
-        self.sources.try_remove(key);
-        self.timers.retain(|timer| timer.key != key);
+    pub fn deregister_timer(&mut self, key: TimerKey) {
+        self.sources.try_remove(key.get());
+        self.timers.retain(|timer| timer.key != key.get());
     }
 
     pub fn dispatch(&mut self, triggered: &mut Vec<T>) -> std::io::Result<()> {
@@ -101,6 +121,12 @@ impl<T: Copy> EventLoop<T> {
                 std::collections::binary_heap::PeekMut::pop(top_timer);
                 continue;
             };
+
+            if let EntryKind::Dead = entry.kind {
+                self.sources.remove(top_timer.key);
+                std::collections::binary_heap::PeekMut::pop(top_timer);
+                continue;
+            }
 
             triggered.push(entry.token);
             if let EntryKind::Timer(TimerMode::Periodic(duration)) = entry.kind {
@@ -163,6 +189,8 @@ impl<T> TokenEntry<T> {
             EntryKind::Timer(timer_mode) => {
                 matches!(timer_mode, TimerMode::Delay(_) | TimerMode::Periodic(_))
             }
+
+            EntryKind::Dead => true,
         }
     }
 }
@@ -171,6 +199,7 @@ impl<T> TokenEntry<T> {
 enum EntryKind {
     Io(polling::PollMode),
     Timer(TimerMode),
+    Dead,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
