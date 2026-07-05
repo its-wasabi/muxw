@@ -1,8 +1,10 @@
+mod input;
+
 pub struct Compositor {
     event_loop: crate::event_loop::EventLoop<crate::Token>,
     triggered_events: Vec<crate::Token>,
-
-    config_command_sender: crossbeam_channel::Sender<crate::config::ConfigCommand>, // display: wayland_server::Display<Self>,
+    config_command_sender: crossbeam_channel::Sender<crate::config::ConfigCommand>,
+    input_manager: input::InputManager,
 }
 
 impl Compositor {
@@ -13,10 +15,12 @@ impl Compositor {
         let config_command_sender =
             crate::config::Config::spawn(&context.path.config_file, event_loop.channel_sender());
 
-        event_loop.register_timer(
-            crate::event_loop::TimerMode::Periodic(std::time::Duration::from_secs(2)),
-            crate::Token::ReloadConfig,
-        );
+        let input_manager = input::InputManager::new()?;
+        event_loop.register_source(
+            &input_manager.fd(),
+            polling::PollMode::Edge,
+            crate::Token::Input(0),
+        )?;
 
         // let mut display =
         //     wayland_server::Display::new().map_err(|err| crate::error::InitError::Wayland {
@@ -32,8 +36,7 @@ impl Compositor {
             triggered_events,
 
             config_command_sender,
-            // display,
-            // config_command,
+            input_manager,
         })
     }
 
@@ -44,9 +47,9 @@ impl Compositor {
             for token in &self.triggered_events {
                 println!("Event: {token:?}");
 
-                if *token == crate::Token::ReloadConfig {
-                    self.config_command_sender
-                        .send(crate::config::ConfigCommand::Reload)?;
+                match token {
+                    crate::Token::Input(_) => self.input_manager.dispatch()?,
+                    crate::Token::Config(_) => println!("EV::CONFIG"),
                 }
             }
         }

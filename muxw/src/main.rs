@@ -16,7 +16,6 @@ mod config;
 mod error;
 mod event_loop;
 mod helpers;
-mod input;
 mod path;
 
 #[derive(Debug)]
@@ -38,7 +37,7 @@ impl Context {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Token {
     Config(config::ConfigRequest),
-    ReloadConfig,
+    Input(usize),
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
