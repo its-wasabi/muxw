@@ -560,7 +560,6 @@ dependencies = [
  "serde",
  "slab",
  "udev",
- "wayland-backend",
  "wayland-protocols",
  "wayland-server",
  "xkbcommon",

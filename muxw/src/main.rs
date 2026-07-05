@@ -46,7 +46,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(debug_assertions)]
     println!("{:#?}", context);
 
-    let mut compositr = compositor::Compositor::new(&context)?;
-
-    compositr.run()
+    compositor::Compositor::new(&context)?.run()
 }

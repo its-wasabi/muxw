@@ -10,9 +10,13 @@ pub struct Cli {
     #[arg(short, long, value_name = "PATH", global = true)]
     pub config: Option<std::path::PathBuf>,
 
-    /// Set config file or directory path
-    #[arg(short, long, value_name = "WAYLAND SOCKET", global = true)]
+    /// Set the Wayland socket name
+    #[arg(short, long, value_name = "NAME", global = true)]
     pub socket: Option<String>,
+
+    /// Output in JSON format
+    #[arg(short, long, global = true)]
+    pub json: bool,
 
     #[command(subcommand)]
     pub command: Option<CliCommand>,
@@ -20,18 +24,11 @@ pub struct Cli {
 
 #[derive(Debug, clap::Subcommand)]
 pub enum CliCommand {
-    /// Query the compositor for runtime info
+    /// Query compositor for runtime info
     Query {
         #[command(subcommand)]
         target: QueryTarget,
-
-        /// output in JSON format
-        #[arg(short, long)]
-        json: bool,
     },
-
-    /// check configuration file
-    Check,
 }
 
 #[derive(Debug, clap::Subcommand)]

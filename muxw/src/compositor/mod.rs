@@ -27,7 +27,7 @@ impl Compositor {
         })
     }
 
-    pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn run(mut self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             self.event_loop.dispatch(&mut self.triggered_events)?;
 

@@ -35,9 +35,7 @@ ash = "0.38.0"
 gbm = "0.18.0"
 drm = "0.14.1"
 wayland-server = { version = "0.31.10", default-features = false }
-wayland-backend = "0.3.11"
 wayland-protocols = { version = "0.32.9", features = ["server", "staging"] }
-
 
 rustix = "1.1.4"
 bitflags = "2.11.0"
