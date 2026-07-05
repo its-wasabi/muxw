@@ -71,10 +71,16 @@ static PATH: muxw_types::Global<path::Path> = muxw_types::Global::new();
 
 mod cli;
 mod compositor;
-// mod config;
+mod config;
 mod error;
+mod event_loop;
 mod input;
 mod path;
+
+#[derive(Debug, Clone, Copy)]
+enum Token {
+    Config(config::ConfigCommand),
+}
 
 fn main() -> Result<(), i32> {
     use clap::Parser;
