@@ -1,5 +1,4 @@
-#![allow(unused)]
-#![allow(dead_code)]
+use clap::Parser;
 
 macro_rules! here {
     () => {
@@ -66,9 +65,6 @@ const fn parse_version(version: &str) -> (u32, u32, u32) {
 }
 const VERSION: (u32, u32, u32) = parse_version(env!("CARGO_PKG_VERSION"));
 
-static CLI: muxw_types::Global<cli::Cli> = muxw_types::Global::new();
-static PATH: muxw_types::Global<path::Path> = muxw_types::Global::new();
-
 mod cli;
 mod compositor;
 mod config;
@@ -77,31 +73,37 @@ mod event_loop;
 mod input;
 mod path;
 
+#[derive(Debug)]
+struct Context {
+    cli: cli::Cli,
+    path: path::Path,
+}
+
+impl Context {
+    fn new() -> Result<Self, crate::error::PathError> {
+        use clap::Parser;
+        let cli = cli::Cli::parse();
+        cli.process().expect("Failed to process");
+        let path = path::Path::new(cli.config.clone())?;
+        Ok(Self { cli, path })
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Token {
     Config(config::ConfigRequest),
     ReloadConfig,
 }
 
-fn main() -> Result<(), i32> {
-    use clap::Parser;
-    let cli = cli::Cli::parse();
-    match exit_on_error(cli.handle(), 1) {
-        cli::CliHandleOutcome::Exit => return Ok(()),
-        cli::CliHandleOutcome::Continue => (),
-    }
-    let path = exit_on_error(path::Path::new(&cli), 1);
-    CLI.init(cli);
-    PATH.init(path);
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let context = Context::new()?;
 
     #[cfg(debug_assertions)]
     {
-        here!("{CLI:#?}");
-        here!("{PATH:#?}");
+        here!("{:#?}", context);
     }
 
-    let mut compositr = compositor::Compositor::new().map_err(|_| 22)?;
-    compositr.run();
+    let mut compositr = compositor::Compositor::new(&context)?;
 
-    Ok(())
+    compositr.run()
 }

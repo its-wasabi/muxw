@@ -23,7 +23,7 @@ fn to_absolute(path: std::path::PathBuf) -> Result<std::path::PathBuf, crate::er
 fn expand_tilde(path: std::path::PathBuf) -> Result<std::path::PathBuf, crate::error::PathError> {
     let str = path.to_string_lossy();
 
-    if !str.starts_with("~") {
+    if !str.starts_with('~') {
         return Ok(path);
     }
 
@@ -53,9 +53,11 @@ pub struct Path {
 }
 
 impl Path {
-    pub fn new(cli: &crate::cli::Cli) -> Result<Self, crate::error::PathError> {
-        let input_config: Option<(std::path::PathBuf, std::path::PathBuf)> = match &cli.config {
-            Some(cli_path) => Some(Self::get_config_paths_from_cli(cli_path.clone())?),
+    pub fn new(
+        config_override: Option<std::path::PathBuf>,
+    ) -> Result<Self, crate::error::PathError> {
+        let input_config = match config_override {
+            Some(config_path) => Some(Self::get_config_paths_from_cli(config_path)?),
             None => Self::get_config_paths_from_env()?,
         };
 

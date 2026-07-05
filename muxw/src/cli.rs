@@ -66,20 +66,23 @@ pub enum CliHandleOutcome {
 }
 
 impl Cli {
-    pub fn handle(&self) -> Result<CliHandleOutcome, crate::error::CliError> {
+    pub fn process(&self) -> Result<CliHandleOutcome, crate::error::CliError> {
         match &self.subcommand {
+            // TODO: Rename to "get"
             Some(CliSub::Query { query, json }) => {
-                Self::handle_query(query, json)?;
+                Self::process_query(query, json)?;
                 Ok(CliHandleOutcome::Exit)
             }
 
+            // TODO: Rename to "check"
             Some(CliSub::Validate { config }) => {
-                Self::handle_validate(config)?;
+                Self::process_validate(config)?;
                 Ok(CliHandleOutcome::Exit)
             }
 
+            // TODO: Make that compile time code
             Some(CliSub::MakeCompletion { shell, stdout }) => {
-                Self::handle_make_completion(shell, stdout)?;
+                Self::process_make_completion(shell, stdout)?;
                 Ok(CliHandleOutcome::Exit)
             }
 
@@ -87,7 +90,7 @@ impl Cli {
         }
     }
 
-    fn handle_query(query: &CliSubQuery, json: &bool) -> Result<(), crate::error::CliError> {
+    fn process_query(query: &CliSubQuery, json: &bool) -> Result<(), crate::error::CliError> {
         match query {
             CliSubQuery::Outputs => todo!("Outputs"),
             CliSubQuery::Inputs => todo!("Inputs"),
@@ -97,12 +100,12 @@ impl Cli {
         }
     }
 
-    fn handle_validate(config: &Option<std::path::PathBuf>) -> Result<(), crate::error::CliError> {
+    fn process_validate(config: &Option<std::path::PathBuf>) -> Result<(), crate::error::CliError> {
         todo!("First implement config logic - Validate config:{config:?}");
     }
 
     // TODO: Move that to system installation process
-    fn handle_make_completion(
+    fn process_make_completion(
         shell: &Option<clap_complete::Shell>,
         stdout: &bool,
     ) -> Result<(), crate::error::CliError> {
