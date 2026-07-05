@@ -15,19 +15,21 @@ muxw-types = { path = "../muxw-types/" }
 slab = "0.4.12"
 multi_index_map = "0.15.1"
 
+clap = { version = "4.5.54", features = ["derive"] }
 serde = { version = "1.0.228", features = ["derive"] }
 
-clap = { version = "4.5.54", features = ["derive"] }
+polling = "3.11.0"
+crossbeam-channel = "0.5.15"
+
+udev = "0.9.3"
+input = "0.9.1"
+xkbcommon = "0.9.0"
 
 mlua = { version = "0.11.5", default-features = false, features = [
 	"luajit52",
 	"vendored",
 	"serialize",
 ] }
-
-udev = "0.9.3"
-input = "0.9.1"
-xkbcommon = "0.9.0"
 
 ash = "0.38.0"
 gbm = "0.18.0"
@@ -38,14 +40,8 @@ wayland-protocols = { version = "0.32.9", features = ["server", "staging"] }
 
 
 rustix = "1.1.4"
-evdev = "0.13.2"
-calloop = "0.14.4"
 bitflags = "2.11.0"
 rustc-hash = "2.1.2"
-typed_floats = "1.0.7"
-
-polling = "3.11.0"
-crossbeam-channel = "0.5.15"
 
 [build-dependencies]
 clap_complete = "4.5.65"
