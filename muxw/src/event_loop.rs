@@ -1,4 +1,3 @@
-pub const DISPATCH_BATCH_CAPACITY: std::num::NonZero<usize> = std::num::NonZero::new(32).unwrap();
 const SOURCES_DEFAULT_CAPACITY: usize = 128;
 const TIMERS_DEFAULT_CAPACITY: usize = 32;
 
@@ -40,7 +39,7 @@ impl<T: Copy> EventLoop<T> {
             channel,
             sender,
 
-            events: polling::Events::with_capacity(DISPATCH_BATCH_CAPACITY),
+            events: polling::Events::new(),
         })
     }
 

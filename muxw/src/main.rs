@@ -34,10 +34,10 @@ impl Context {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum Token {
     Config(config::ConfigRequest),
-    Input(usize),
+    Input(compositor::input::InputEvent),
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
