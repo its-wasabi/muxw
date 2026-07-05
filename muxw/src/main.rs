@@ -71,7 +71,7 @@ static PATH: muxw_types::Global<path::Path> = muxw_types::Global::new();
 
 mod cli;
 mod compositor;
-mod config;
+// mod config;
 mod error;
 mod input;
 mod path;

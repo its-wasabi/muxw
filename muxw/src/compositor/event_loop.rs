@@ -1,5 +1,3 @@
-// TODO: Think about using IoKey & TimerKey more internally
-
 const SOURCES_DEFAULT_CAPACITY: usize = 128;
 const TIMERS_DEFAULT_CAPACITY: usize = 32;
 const CHANNELS_RX_DEFAULT_CAPACITY: usize = 8;
@@ -19,7 +17,7 @@ pub struct EventLoop<T: Copy> {
 pub struct IoKey(usize);
 
 impl IoKey {
-    pub fn get(self) -> usize {
+    pub const fn get(self) -> usize {
         self.0
     }
 }
@@ -28,7 +26,7 @@ impl IoKey {
 pub struct TimerKey(usize);
 
 impl TimerKey {
-    pub fn get(self) -> usize {
+    pub const fn get(self) -> usize {
         self.0
     }
 }
@@ -77,10 +75,10 @@ impl<T: Copy> EventLoop<T> {
     }
 
     pub fn register_timer(&mut self, mode: TimerMode, token: T) -> TimerKey {
-        let key = self.sources.insert(TokenEntry::new_timer(token, mode));
+        let key = TimerKey(self.sources.insert(TokenEntry::new_timer(token, mode)));
         let timer = mode.make_timer(key);
         self.timers.push(timer);
-        TimerKey(key)
+        key
     }
 
     pub fn lazy_deregister_timer(&mut self, key: TimerKey) {
@@ -91,7 +89,7 @@ impl<T: Copy> EventLoop<T> {
 
     pub fn deregister_timer(&mut self, key: TimerKey) {
         self.sources.try_remove(key.get());
-        self.timers.retain(|timer| timer.key != key.get());
+        self.timers.retain(|timer| timer.key != key);
     }
 
     pub fn dispatch(&mut self, triggered: &mut Vec<T>) -> std::io::Result<()> {
@@ -117,13 +115,13 @@ impl<T: Copy> EventLoop<T> {
                 break;
             }
 
-            let Some(entry) = self.sources.get(top_timer.key).copied() else {
+            let Some(entry) = self.sources.get(top_timer.key.get()).copied() else {
                 std::collections::binary_heap::PeekMut::pop(top_timer);
                 continue;
             };
 
-            if let EntryKind::Dead = entry.kind {
-                self.sources.remove(top_timer.key);
+            if matches!(entry.kind, EntryKind::Dead) {
+                self.sources.remove(top_timer.key.get());
                 std::collections::binary_heap::PeekMut::pop(top_timer);
                 continue;
             }
@@ -132,7 +130,7 @@ impl<T: Copy> EventLoop<T> {
             if let EntryKind::Timer(TimerMode::Periodic(duration)) = entry.kind {
                 top_timer.deadline = now + duration;
             } else {
-                self.sources.remove(top_timer.key);
+                self.sources.remove(top_timer.key.get());
                 std::collections::binary_heap::PeekMut::pop(top_timer);
             }
         }
@@ -153,11 +151,14 @@ pub struct EventSender<T> {
 }
 
 impl<T: Copy> EventSender<T> {
-    fn new(poller: std::sync::Arc<polling::Poller>, tx: crossbeam_channel::Sender<T>) -> Self {
+    const fn new(
+        poller: std::sync::Arc<polling::Poller>,
+        tx: crossbeam_channel::Sender<T>,
+    ) -> Self {
         Self { tx, poller }
     }
 
-    pub fn send(&mut self, token: T) {
+    pub fn send(&self, token: T) {
         self.tx.send(token);
         self.poller.notify();
     }
@@ -219,7 +220,7 @@ impl TimerMode {
         }
     }
 
-    fn make_timer(self, key: usize) -> Timer {
+    fn make_timer(self, key: TimerKey) -> Timer {
         let deadline = self.deadline();
         Timer::new(key, deadline)
     }
@@ -227,12 +228,12 @@ impl TimerMode {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Timer {
-    key: usize,
+    key: TimerKey,
     deadline: std::time::Instant,
 }
 
 impl Timer {
-    pub const fn new(key: usize, deadline: std::time::Instant) -> Self {
+    pub const fn new(key: TimerKey, deadline: std::time::Instant) -> Self {
         Self { key, deadline }
     }
 
