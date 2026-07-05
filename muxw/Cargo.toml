@@ -7,14 +7,18 @@ rust-version = "1.93.0"
 authors = ["Mikołaj Kozłowski <kozlowski.g.mikolaj@gmail.com>"]
 license-file = "LICENSE"
 repository = "https://github.com/Fasamii/muxw"
-description = "muxw wayland compositor"
+description = "Hyperextensible Wayland compositor"
 
 [dependencies]
 muxw-types = { path = "../muxw-types/" }
 
-clap = { version = "4.5.54", features = ["derive"] }
+slab = "0.4.12"
+multi_index_map = "0.15.1"
 
 serde = { version = "1.0.228", features = ["derive"] }
+
+clap = { version = "4.5.54", features = ["derive"] }
+
 mlua = { version = "0.11.5", default-features = false, features = [
 	"luajit52",
 	"vendored",
@@ -32,10 +36,8 @@ wayland-server = { version = "0.31.10", default-features = false }
 wayland-backend = "0.3.11"
 wayland-protocols = { version = "0.32.9", features = ["server", "staging"] }
 
-arc-swap = "1.8.0"
-multi_index_map = "0.15.1"
 
-libc = "0.2.182"
+rustix = "1.1.4"
 evdev = "0.13.2"
 calloop = "0.14.4"
 bitflags = "2.11.0"
@@ -43,9 +45,7 @@ rustc-hash = "2.1.2"
 typed_floats = "1.0.7"
 
 polling = "3.11.0"
-slab = "0.4.12"
 crossbeam-channel = "0.5.15"
-crossterm = "0.29.0"
 
 [build-dependencies]
 clap_complete = "4.5.65"

@@ -158,23 +158,13 @@ impl input::LibinputInterface for LibinputInterface {
         path: &std::path::Path,
         flags: i32,
     ) -> std::result::Result<std::os::fd::OwnedFd, i32> {
-        use std::os::unix::fs::OpenOptionsExt;
         std::println!(
             "\x1b[38;5;87mInput::ADD::(>\x1b[38;5;198m {} \x1b[38;5;87m<)\x1b[0m",
             path.display()
         );
 
-        let access_mode = flags & libc::O_ACCMODE;
-        let is_read = access_mode == libc::O_RDONLY || access_mode == libc::O_RDWR;
-        let is_write = access_mode == libc::O_WRONLY || access_mode == libc::O_RDWR;
-
-        std::fs::OpenOptions::new()
-            .custom_flags(flags)
-            .read(is_read)
-            .write(is_write)
-            .open(path)
-            .map(std::convert::Into::into)
-            .map_err(|err| err.raw_os_error().unwrap_or(libc::EIO))
+        let oflags = rustix::fs::OFlags::from_bits_truncate(flags as u32);
+        rustix::fs::open(path, oflags, rustix::fs::Mode::empty()).map_err(|err| err.raw_os_error())
     }
 
     fn close_restricted(&mut self, fd: std::os::fd::OwnedFd) {

@@ -1,26 +1,23 @@
-use clap::CommandFactory;
-use clap_complete::{Shell, generate_to};
-use std::env;
-use std::io::Error;
-
 #[path = "src/cli/domain.rs"]
 mod domain;
 
-fn main() -> Result<(), Error> {
-    if let Some(outdir) = env::var_os("OUT_DIR") {
+use clap::CommandFactory;
+
+fn main() -> Result<(), std::io::Error> {
+    if let Some(outdir) = std::env::var_os("OUT_DIR") {
         let mut cmd = domain::Cli::command();
-        let bin_name = env!("CARGO_PKG_NAME");
+        let bin_name = std::env!("CARGO_PKG_NAME");
 
         let shells = [
-            Shell::Bash,
-            Shell::Zsh,
-            Shell::Fish,
-            Shell::Elvish,
-            Shell::PowerShell,
+            clap_complete::Shell::Bash,
+            clap_complete::Shell::Zsh,
+            clap_complete::Shell::Fish,
+            clap_complete::Shell::Elvish,
+            clap_complete::Shell::PowerShell,
         ];
 
         for shell in shells {
-            generate_to(shell, &mut cmd, bin_name, &outdir)?;
+            clap_complete::generate_to(shell, &mut cmd, bin_name, &outdir)?;
         }
 
         println!(
