@@ -143,7 +143,8 @@ impl Path {
         #[allow(clippy::collapsible_if)]
         if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
             if !xdg_config.is_empty() {
-                let config_dir = std::path::PathBuf::from(xdg_config).join(crate::NAME);
+                let config_dir =
+                    std::path::PathBuf::from(xdg_config).join(env!("CARGO_CRATE_NAME"));
                 let config_file = config_dir.join(Self::get_config_filename());
                 return Some((config_dir, config_file));
             }
@@ -157,7 +158,7 @@ impl Path {
             if !home.is_empty() {
                 let config_dir = std::path::PathBuf::from(home)
                     .join(".config")
-                    .join(crate::NAME);
+                    .join(env!("CARGO_CRATE_NAME"));
                 let config_file = config_dir.join(Self::get_config_filename());
                 return Some((config_dir, config_file));
             }

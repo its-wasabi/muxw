@@ -1,5 +1,5 @@
 #[derive(Debug, clap::Parser)]
-// TODO:  #[command(name = crate::NAME)]
+#[command(name = env!("CARGO_PKG_NAME"))]
 #[command(author, version, about, long_about = None)]
 #[command(args_conflicts_with_subcommands = false)]
 #[command(subcommand_value_name = "SUBCOMMAND")]

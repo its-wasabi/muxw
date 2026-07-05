@@ -1,10 +1,3 @@
-fn exit_on_error<T, E: std::fmt::Display>(result: Result<T, E>, code: i32) -> T {
-    result.unwrap_or_else(|err| {
-        eprintln!("\x1b[38;5;1mERROR:\x1b[0m {err}");
-        std::process::exit(code)
-    })
-}
-
 const DEFAULT_CONFIG: &str = /* lua */
     r#"
 print("INSIDE LUA")
@@ -15,39 +8,14 @@ Mux.bind("A", Mux.motion.focus.left);
 print("LUA DONE")
 "#;
 
-const NAME: &str = env!("CARGO_PKG_NAME");
-const NAME_C: &std::ffi::CStr = unsafe {
-    std::ffi::CStr::from_bytes_with_nul_unchecked(concat!(env!("CARGO_PKG_NAME"), "\0").as_bytes())
-};
-
-const fn parse_version(version: &str) -> (u32, u32, u32) {
-    let bytes = version.as_bytes();
-    let mut parts = [0u32; 3];
-    let mut current_part = 0;
-
-    let mut i = 0;
-    while i < bytes.len() && current_part < 3 {
-        match bytes[i] {
-            b'0'..=b'9' => {
-                parts[current_part] = parts[current_part] * 10 + (bytes[i] - b'0') as u32;
-            }
-            b'.' => {
-                current_part += 1;
-            }
-            _ => (),
-        }
-        i += 1;
-    }
-
-    (parts[0], parts[1], parts[2])
-}
-const VERSION: (u32, u32, u32) = parse_version(env!("CARGO_PKG_VERSION"));
+const VERSION: (u32, u32, u32) = helpers::parse_version(env!("CARGO_PKG_VERSION"));
 
 mod cli;
 mod compositor;
 mod config;
 mod error;
 mod event_loop;
+mod helpers;
 mod input;
 mod path;
 
