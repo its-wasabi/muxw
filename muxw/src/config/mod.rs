@@ -4,19 +4,91 @@ pub struct Config {}
 
 impl Config {
     pub fn spawn(
+        path: &std::path::Path,
         sender: crate::event_loop::EventSender<crate::Token>,
-    ) -> crossbeam_channel::Sender<ConfigEvent> {
-        let (command_sender, command_receiver) = crossbeam_channel::unbounded::<ConfigEvent>();
+    ) -> crossbeam_channel::Sender<ConfigCommand> {
+        let (command_sender, command_receiver) = crossbeam_channel::unbounded::<ConfigCommand>();
+        let path = path.to_path_buf();
+
+        std::thread::Builder::new()
+            .name(String::from("muxw-config"))
+            .spawn(move || {
+                let mut lua = Self::init_lua(&path).unwrap();
+                while let Ok(command) = command_receiver.recv() {
+                    match command {
+                        ConfigCommand::Reload => {
+                            println!("RELOAD CONFIG");
+                            sender.send(crate::Token::Config(ConfigRequest::HujWie));
+                        }
+                    }
+                }
+            });
 
         command_sender
     }
+
+    fn init_lua(path: &std::path::Path) -> mlua::Result<mlua::Lua> {
+        let libs = mlua::StdLib::TABLE
+            | mlua::StdLib::MATH
+            | mlua::StdLib::STRING
+            | mlua::StdLib::IO
+            | mlua::StdLib::OS;
+        let lua = mlua::Lua::new_with(libs, mlua::LuaOptions::default())?;
+
+        lua.set_app_data(api::event::EventRegistry::default());
+        let mux_table = api::create_global_table(&lua).unwrap();
+        lua.globals()
+            .set("Mux", mux_table)
+            .map_err(|_| crate::error::InitError::Mlua {
+                action: "set Mux table",
+            })
+            .unwrap();
+
+        let source = Self::read_config_source(path)
+            .map_err(|err| crate::error::InitError::Io {
+                action: "read config file",
+                path: Some(path.to_owned()),
+                source: err,
+            })
+            .unwrap();
+
+        lua.load(&source).exec().unwrap();
+        Ok(lua)
+    }
+
+    fn read_config_source(path: &std::path::Path) -> std::io::Result<String> {
+        match std::fs::read_to_string(path) {
+            Ok(source) => Ok(source),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                Self::create_default_config(path)?;
+                std::fs::read_to_string(path)
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    pub fn create_default_config(path: &std::path::Path) -> std::io::Result<()> {
+        #[cfg(debug_assertions)]
+        here!("Config doesn't exist - creating default");
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, crate::DEFAULT_CONFIG)
+    }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum ConfigCommand {}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigRequest {
+    HujWie,
+}
 
-#[derive(Debug, Clone, Copy)]
-pub enum ConfigEvent {}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigCommand {
+    Reload,
+    // NOTE: DO NOT USE E.G.: KeyPressed(Key)
+    // Only allowed communication that can notify about key pressed is e.g.: bind response
+    // CallbackTrigger(CallbackId)
+}
 
 // pub struct Config {
 //     lua: mlua::Lua,
@@ -161,25 +233,6 @@ pub enum ConfigEvent {}
 //         Ok(lua)
 //     }
 //
-//     fn read_config_source(path: &std::path::Path) -> std::io::Result<String> {
-//         match std::fs::read_to_string(path) {
-//             Ok(source) => Ok(source),
-//             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-//                 Self::create_default_config(path)?;
-//                 std::fs::read_to_string(path)
-//             }
-//             Err(err) => Err(err),
-//         }
-//     }
-//
-//     pub fn create_default_config(path: &std::path::Path) -> std::io::Result<()> {
-//         #[cfg(debug_assertions)]
-//         here!("Config doesn't exist - creating default");
-//         if let Some(parent) = path.parent() {
-//             std::fs::create_dir_all(parent)?;
-//         }
-//         std::fs::write(path, crate::DEFAULT_CONFIG)
-//     }
 //
 //     fn run(mut self) -> Result<(), crate::error::InitError> {
 //         loop {

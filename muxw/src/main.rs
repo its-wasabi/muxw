@@ -77,9 +77,10 @@ mod event_loop;
 mod input;
 mod path;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Token {
-    Config(config::ConfigCommand),
+    Config(config::ConfigRequest),
+    ReloadConfig,
 }
 
 fn main() -> Result<(), i32> {

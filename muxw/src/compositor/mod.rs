@@ -4,7 +4,7 @@ pub struct Compositor {
     event_loop: crate::event_loop::EventLoop<crate::Token>,
     triggered_events: Vec<crate::Token>,
 
-    config_event_sender: crossbeam_channel::Sender<crate::config::ConfigEvent>, // display: wayland_server::Display<Self>,
+    config_command_sender: crossbeam_channel::Sender<crate::config::ConfigCommand>, // display: wayland_server::Display<Self>,
 }
 
 impl Compositor {
@@ -12,7 +12,13 @@ impl Compositor {
         let mut event_loop = crate::event_loop::EventLoop::new()?;
         let triggered_events = Vec::with_capacity(crate::event_loop::DISPATCH_BATCH_CAPACITY.get());
 
-        let config_event_sender = crate::config::Config::spawn(event_loop.channel_sender());
+        let config_command_sender =
+            crate::config::Config::spawn(&crate::PATH.config_file, event_loop.channel_sender());
+
+        event_loop.register_timer(
+            crate::event_loop::TimerMode::Periodic(std::time::Duration::from_secs(2)),
+            crate::Token::ReloadConfig,
+        );
 
         // let mut display =
         //     wayland_server::Display::new().map_err(|err| crate::error::InitError::Wayland {
@@ -27,7 +33,7 @@ impl Compositor {
             event_loop,
             triggered_events,
 
-            config_event_sender,
+            config_command_sender,
             // display,
             // config_command,
         })
@@ -37,8 +43,13 @@ impl Compositor {
         loop {
             self.event_loop.dispatch(&mut self.triggered_events);
 
-            for event in &self.triggered_events {
-                println!("Event: {event:?}");
+            for token in &self.triggered_events {
+                println!("Event: {token:?}");
+
+                if *token == crate::Token::ReloadConfig {
+                    self.config_command_sender
+                        .send(crate::config::ConfigCommand::Reload);
+                }
             }
         }
     }
