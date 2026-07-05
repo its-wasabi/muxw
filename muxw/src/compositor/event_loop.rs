@@ -1,14 +1,12 @@
 const SOURCES_DEFAULT_CAPACITY: usize = 128;
 const TIMERS_DEFAULT_CAPACITY: usize = 32;
-const CHANNELS_RX_DEFAULT_CAPACITY: usize = 8;
-const CHANNELS_TX_DEFAULT_CAPACITY: usize = 8;
 
 pub struct EventLoop<T: Copy> {
     poller: std::sync::Arc<polling::Poller>,
     sources: slab::Slab<TokenEntry<T>>,
     timers: std::collections::BinaryHeap<Timer>,
-    channels_rx: Vec<crossbeam_channel::Receiver<T>>,
-    channels_tx: Vec<crossbeam_channel::Sender<T>>,
+    channel: crossbeam_channel::Receiver<T>,
+    sender: crossbeam_channel::Sender<T>,
 
     events: polling::Events,
 }
@@ -33,12 +31,13 @@ impl TimerKey {
 
 impl<T: Copy> EventLoop<T> {
     pub fn new() -> std::io::Result<Self> {
+        let (sender, channel) = crossbeam_channel::unbounded();
         Ok(Self {
             poller: std::sync::Arc::new(polling::Poller::new()?),
             sources: slab::Slab::with_capacity(SOURCES_DEFAULT_CAPACITY),
             timers: std::collections::BinaryHeap::with_capacity(TIMERS_DEFAULT_CAPACITY),
-            channels_rx: Vec::with_capacity(CHANNELS_RX_DEFAULT_CAPACITY),
-            channels_tx: Vec::with_capacity(CHANNELS_TX_DEFAULT_CAPACITY),
+            channel,
+            sender,
 
             events: polling::Events::with_capacity(super::DISPATCH_BATCH_CAPACITY),
         })
@@ -109,6 +108,10 @@ impl<T: Copy> EventLoop<T> {
             }
         }));
 
+        while let Ok(token) = self.channel.try_recv() {
+            triggered.push(token);
+        }
+
         let now = std::time::Instant::now();
         while let Some(mut top_timer) = self.timers.peek_mut() {
             if !top_timer.is_expired(now) {
@@ -138,28 +141,26 @@ impl<T: Copy> EventLoop<T> {
         Ok(())
     }
 
-    pub fn channel_sender(&mut self) -> EventSender<T> {
-        let (tx, rx) = crossbeam_channel::unbounded::<T>();
-        self.channels_rx.push(rx);
-        EventSender::new(self.poller.clone(), tx)
+    pub fn channel_sender(&self) -> EventSender<T> {
+        EventSender::new(self.poller.clone(), self.sender.clone())
     }
 }
 
 pub struct EventSender<T> {
-    tx: crossbeam_channel::Sender<T>,
+    sender: crossbeam_channel::Sender<T>,
     poller: std::sync::Arc<polling::Poller>,
 }
 
 impl<T: Copy> EventSender<T> {
     const fn new(
         poller: std::sync::Arc<polling::Poller>,
-        tx: crossbeam_channel::Sender<T>,
+        sender: crossbeam_channel::Sender<T>,
     ) -> Self {
-        Self { tx, poller }
+        Self { sender, poller }
     }
 
     pub fn send(&self, token: T) {
-        self.tx.send(token);
+        self.sender.send(token);
         self.poller.notify();
     }
 }

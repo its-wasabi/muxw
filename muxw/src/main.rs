@@ -94,6 +94,7 @@ fn main() -> Result<(), i32> {
     }
 
     let mut compositr = compositor::Compositor::new().map_err(|_| 22)?;
+    compositr.run();
 
     Ok(())
 }
