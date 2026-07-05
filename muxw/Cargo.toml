@@ -13,7 +13,6 @@ description = "muxw wayland compositor"
 muxw-types = { path = "../muxw-types/" }
 
 clap = { version = "4.5.54", features = ["derive"] }
-clap_complete = "4.5.65"
 
 serde = { version = "1.0.228", features = ["derive"] }
 mlua = { version = "0.11.5", default-features = false, features = [
@@ -47,3 +46,7 @@ polling = "3.11.0"
 slab = "0.4.12"
 crossbeam-channel = "0.5.15"
 crossterm = "0.29.0"
+
+[build-dependencies]
+clap_complete = "4.5.65"
+clap = { version = "4.5.54", features = ["derive"] }

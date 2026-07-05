@@ -60,7 +60,7 @@ struct Context {
 impl Context {
     fn new() -> Result<Self, crate::error::PathError> {
         use clap::Parser;
-        let cli = cli::domain::Cli::parse();
+        let cli = cli::domain::parse();
         cli.process().expect("Failed to process");
         let path = path::Path::new(cli.config.clone())?;
         Ok(Self { cli, path })

@@ -69,7 +69,6 @@ impl Config {
 
     pub fn create_default_config(path: &std::path::Path) -> std::io::Result<()> {
         #[cfg(debug_assertions)]
-        here!("Config doesn't exist - creating default");
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -243,12 +242,10 @@ pub enum ConfigCommand {
 //
 //             match command {
 //                 muxw_types::config::ConfigCommand::Exit => {
-//                     here!("EXIT");
 //                     return Ok(());
 //                 }
 //
 //                 muxw_types::config::ConfigCommand::Reload => {
-//                     here!("RELOAD");
 //                     let lua = Self::load_config(&self.path).unwrap();
 //                     self.lua = lua;
 //                 }
@@ -268,9 +265,6 @@ pub enum ConfigCommand {
 //                 }
 //
 //                 other => {
-//                     here!(
-//                         "IMPORTANT({other:?}): Code is unimplemented yet (this is here only to make that compile)"
-//                     )
 //                 }
 //             }
 //         }

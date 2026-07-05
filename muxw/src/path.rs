@@ -172,11 +172,6 @@ impl Path {
             path: None,
             source: err,
         })?;
-        here!(
-            "No config dir found creating .{} config dir at {}",
-            crate::NAME,
-            current_dir.display()
-        );
 
         let current_dir_file = current_dir.join(Self::get_config_filename());
 
