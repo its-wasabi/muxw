@@ -10,6 +10,7 @@ print("LUA DONE")
 
 const VERSION: (u32, u32, u32) = helpers::parse_version(env!("CARGO_PKG_VERSION"));
 
+mod backend;
 mod cli;
 mod compositor;
 mod config;
@@ -17,6 +18,7 @@ mod error;
 mod event_loop;
 mod helpers;
 mod path;
+mod renderer;
 
 #[derive(Debug)]
 struct Context {
@@ -25,10 +27,10 @@ struct Context {
 }
 
 impl Context {
-    fn new() -> Result<Self, crate::error::PathError> {
+    fn new() -> Result<Self, Box<dyn std::error::Error>> {
         use clap::Parser;
         let cli = cli::domain::Cli::parse();
-        cli.process().expect("Failed to process");
+        cli.process()?;
         let path = path::Path::new(cli.config.clone())?;
         Ok(Self { cli, path })
     }
@@ -36,19 +38,18 @@ impl Context {
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
-    Config(config::ConfigRequest),
-    Input(compositor::input::InputEvent),
-
     WaylandSocket,
     WaylandDisplay,
     WaylandClientDisconnected(wayland_server::backend::ClientId),
+    Input(backend::input::InputEvent),
+    Config(config::ConfigRequest),
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = Context::new()?;
 
     #[cfg(debug_assertions)]
-    println!("{:#?}", context);
+    println!("{context:#?}");
 
     compositor::Compositor::new(&context)?.run()
 }

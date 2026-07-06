@@ -6,27 +6,9 @@ pub struct EventLoop<T: Clone> {
     sources: slab::Slab<TokenEntry<T>>,
     timers: std::collections::BinaryHeap<Timer>,
     channel: crossbeam_channel::Receiver<T>,
+
     sender: crossbeam_channel::Sender<T>,
-
     events: polling::Events,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct IoKey(usize);
-
-impl IoKey {
-    pub const fn get(self) -> usize {
-        self.0
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TimerKey(usize);
-
-impl TimerKey {
-    pub const fn get(self) -> usize {
-        self.0
-    }
 }
 
 impl<T: Clone> EventLoop<T> {
@@ -146,22 +128,21 @@ impl<T: Clone> EventLoop<T> {
     }
 }
 
-pub struct EventSender<T> {
-    sender: crossbeam_channel::Sender<T>,
-    poller: std::sync::Arc<polling::Poller>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct IoKey(usize);
+
+impl IoKey {
+    pub const fn get(self) -> usize {
+        self.0
+    }
 }
 
-impl<T: Clone> EventSender<T> {
-    const fn new(
-        poller: std::sync::Arc<polling::Poller>,
-        sender: crossbeam_channel::Sender<T>,
-    ) -> Self {
-        Self { sender, poller }
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TimerKey(usize);
 
-    pub fn send(&self, token: T) {
-        self.sender.send(token);
-        self.poller.notify();
+impl TimerKey {
+    pub const fn get(self) -> usize {
+        self.0
     }
 }
 
@@ -257,5 +238,24 @@ impl PartialOrd for Timer {
 impl Ord for Timer {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         other.deadline.cmp(&self.deadline)
+    }
+}
+
+pub struct EventSender<T> {
+    sender: crossbeam_channel::Sender<T>,
+    poller: std::sync::Arc<polling::Poller>,
+}
+
+impl<T: Clone> EventSender<T> {
+    const fn new(
+        poller: std::sync::Arc<polling::Poller>,
+        sender: crossbeam_channel::Sender<T>,
+    ) -> Self {
+        Self { sender, poller }
+    }
+
+    pub fn send(&self, token: T) {
+        self.sender.send(token);
+        self.poller.notify();
     }
 }

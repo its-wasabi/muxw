@@ -12,7 +12,7 @@ impl domain::Cli {
         }
     }
 
-    fn query(query: &domain::QueryTarget, json: bool) -> Result<(), crate::error::CliError> {
+    fn query(query: &domain::QueryTarget, _json: bool) -> Result<(), crate::error::CliError> {
         match query {
             domain::QueryTarget::Outputs => todo!("Outputs"),
             domain::QueryTarget::Inputs => todo!("Inputs"),

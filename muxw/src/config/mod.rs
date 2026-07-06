@@ -1,4 +1,4 @@
-pub mod api;
+// pub mod api;
 
 pub struct Config {}
 
@@ -6,25 +6,24 @@ impl Config {
     pub fn spawn(
         path: &std::path::Path,
         sender: crate::event_loop::EventSender<crate::Token>,
-    ) -> crossbeam_channel::Sender<ConfigCommand> {
+    ) -> Result<crossbeam_channel::Sender<ConfigCommand>, Box<dyn std::error::Error>> {
         let (command_sender, command_receiver) = crossbeam_channel::unbounded::<ConfigCommand>();
         let path = path.to_path_buf();
 
         std::thread::Builder::new()
             .name(String::from("muxw-config"))
             .spawn(move || {
-                let mut lua = Self::init_lua(&path).unwrap();
+                let lua = Self::init_lua(&path).unwrap();
                 while let Ok(command) = command_receiver.recv() {
                     match command {
                         ConfigCommand::Reload => {
                             println!("RELOAD CONFIG");
-                            sender.send(crate::Token::Config(ConfigRequest::HujWie));
                         }
                     }
                 }
-            });
+            })?;
 
-        command_sender
+        Ok(command_sender)
     }
 
     fn init_lua(path: &std::path::Path) -> mlua::Result<mlua::Lua> {
@@ -35,14 +34,14 @@ impl Config {
             | mlua::StdLib::OS;
         let lua = mlua::Lua::new_with(libs, mlua::LuaOptions::default())?;
 
-        lua.set_app_data(api::event::EventRegistry::default());
-        let mux_table = api::create_global_table(&lua).unwrap();
-        lua.globals()
-            .set("Mux", mux_table)
-            .map_err(|_| crate::error::InitError::Mlua {
-                action: "set Mux table",
-            })
-            .unwrap();
+        // lua.set_app_data(api::event::EventRegistry::default());
+        // let mux_table = api::create_global_table(&lua).unwrap();
+        // lua.globals()
+        //     .set("Mux", mux_table)
+        //     .map_err(|_| crate::error::InitError::Mlua {
+        //         action: "set Mux table",
+        //     })
+        //     .unwrap();
 
         let source = Self::read_config_source(path)
             .map_err(|err| crate::error::InitError::Io {
@@ -76,9 +75,9 @@ impl Config {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConfigRequest {
-    HujWie,
+    InputDevice,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

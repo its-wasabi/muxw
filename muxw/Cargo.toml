@@ -31,15 +31,16 @@ mlua = { version = "0.11.5", default-features = false, features = [
 	"serialize",
 ] }
 
-ash = "0.38.0"
+drm = "0.15.0"
 gbm = "0.18.0"
-drm = "0.14.1"
+ash = "0.38.0"
 wayland-server = { version = "0.31.10", default-features = false }
 wayland-protocols = { version = "0.32.9", features = ["server", "staging"] }
 
 rustix = "1.1.4"
 bitflags = "2.11.0"
 rustc-hash = "2.1.2"
+log = "0.4.33"
 
 [build-dependencies]
 clap_complete = "4.5.65"

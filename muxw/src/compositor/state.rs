@@ -1,17 +1,17 @@
-pub struct CompositorState {
+pub struct State {
     pub config_command_sender: crossbeam_channel::Sender<crate::config::ConfigCommand>,
-    pub input_manager: super::input::InputManager,
+    pub input_manager: crate::backend::input::InputManager,
 }
 
-impl CompositorState {
+impl State {
     pub(super) fn new(
         context: &crate::Context,
-        event_loop: &mut crate::event_loop::EventLoop<crate::Token>,
+        event_loop: &crate::event_loop::EventLoop<crate::Token>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let config_command_sender =
-            crate::config::Config::spawn(&context.path.config_file, event_loop.channel_sender());
+            crate::config::Config::spawn(&context.path.config_file, event_loop.channel_sender())?;
 
-        let input_manager = super::input::InputManager::new(event_loop.channel_sender())?;
+        let input_manager = crate::backend::input::InputManager::new(event_loop.channel_sender())?;
 
         Ok(Self {
             config_command_sender,
@@ -21,7 +21,7 @@ impl CompositorState {
 }
 
 impl wayland_server::GlobalDispatch<wayland_server::protocol::wl_compositor::WlCompositor, ()>
-    for CompositorState
+    for State
 {
     fn bind(
         _state: &mut Self,
@@ -36,9 +36,7 @@ impl wayland_server::GlobalDispatch<wayland_server::protocol::wl_compositor::WlC
     }
 }
 
-impl wayland_server::Dispatch<wayland_server::protocol::wl_compositor::WlCompositor, ()>
-    for CompositorState
-{
+impl wayland_server::Dispatch<wayland_server::protocol::wl_compositor::WlCompositor, ()> for State {
     fn request(
         _state: &mut Self,
         _client: &wayland_server::Client,
@@ -48,6 +46,6 @@ impl wayland_server::Dispatch<wayland_server::protocol::wl_compositor::WlComposi
         _dhandle: &wayland_server::DisplayHandle,
         _data_init: &mut wayland_server::DataInit<'_, Self>,
     ) {
-        println!("Received wl_compositor request: {:?}", request);
+        println!("Received wl_compositor request: {request:?}");
     }
 }
