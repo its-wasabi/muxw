@@ -1,7 +1,7 @@
 const SOURCES_DEFAULT_CAPACITY: usize = 128;
 const TIMERS_DEFAULT_CAPACITY: usize = 32;
 
-pub struct EventLoop<T: Copy> {
+pub struct EventLoop<T: Clone> {
     poller: std::sync::Arc<polling::Poller>,
     sources: slab::Slab<TokenEntry<T>>,
     timers: std::collections::BinaryHeap<Timer>,
@@ -29,7 +29,7 @@ impl TimerKey {
     }
 }
 
-impl<T: Copy> EventLoop<T> {
+impl<T: Clone> EventLoop<T> {
     pub fn new() -> std::io::Result<Self> {
         let (sender, channel) = crossbeam_channel::unbounded();
         Ok(Self {
@@ -104,7 +104,7 @@ impl<T: Copy> EventLoop<T> {
             if entry.is_oneshot() {
                 Some(sources.remove(event.key).token)
             } else {
-                Some(entry.token)
+                Some(entry.token.clone())
             }
         }));
 
@@ -118,7 +118,7 @@ impl<T: Copy> EventLoop<T> {
                 break;
             }
 
-            let Some(entry) = self.sources.get(top_timer.key.get()).copied() else {
+            let Some(entry) = self.sources.get(top_timer.key.get()).clone() else {
                 std::collections::binary_heap::PeekMut::pop(top_timer);
                 continue;
             };
@@ -129,7 +129,7 @@ impl<T: Copy> EventLoop<T> {
                 continue;
             }
 
-            triggered.push(entry.token);
+            triggered.push(entry.token.clone());
             if let EntryKind::Timer(TimerMode::Periodic(duration)) = entry.kind {
                 top_timer.deadline = now + duration;
             } else {
@@ -151,7 +151,7 @@ pub struct EventSender<T> {
     poller: std::sync::Arc<polling::Poller>,
 }
 
-impl<T: Copy> EventSender<T> {
+impl<T: Clone> EventSender<T> {
     const fn new(
         poller: std::sync::Arc<polling::Poller>,
         sender: crossbeam_channel::Sender<T>,

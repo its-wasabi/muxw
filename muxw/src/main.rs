@@ -34,10 +34,14 @@ impl Context {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum Token {
     Config(config::ConfigRequest),
     Input(compositor::input::InputEvent),
+
+    WaylandSocket,
+    WaylandDisplay,
+    WaylandClientDisconnected(wayland_server::backend::ClientId),
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
