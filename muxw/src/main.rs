@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 const DEFAULT_CONFIG: &str = /* lua */
     r#"
 print("INSIDE LUA")
@@ -36,11 +38,21 @@ impl Context {
     }
 }
 
+// TODO: Think about using references if Token needs to reference bigger blob of data e.g.: if you
+// introduce Token::Notify variant it would probably carry notify data which eventually will be
+// String you could potentially pass ownership of that string and string itself is mainly size of
+// the pointer but its already making it not optimal for events that carry only its variant in the
+// Token... Think about it (hell or low performance) (making data indirect two times) Token ->
+// NotifyData(String) -> String in heap is also not good
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
     WaylandSocket,
     WaylandDisplay,
     WaylandClientDisconnected(wayland_server::backend::ClientId),
+
+    DrmUdev,
+    DrmCard(backend::drm::DrmCardKey),
+
     Input(backend::input::InputEvent),
     Config(config::ConfigRequest),
 }

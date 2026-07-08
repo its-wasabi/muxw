@@ -100,7 +100,7 @@ impl<T: Clone> EventLoop<T> {
                 break;
             }
 
-            let Some(entry) = self.sources.get(top_timer.key.get()).clone() else {
+            let Some(entry) = self.sources.get(top_timer.key.get()) else {
                 std::collections::binary_heap::PeekMut::pop(top_timer);
                 continue;
             };

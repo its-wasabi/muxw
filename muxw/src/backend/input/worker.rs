@@ -106,8 +106,8 @@ fn drain_libinput_events(worker: &mut InputWorker) {
                 let key = super::InputDeviceKey(devices.insert(device.clone()));
                 device_keys.insert(device, key);
                 sender.send(crate::Token::Input(super::InputEvent {
-                    id: key,
-                    kind: super::Kind::DeviceAdded,
+                    key,
+                    kind: super::InputEventKind::DeviceAdded,
                 }));
             }
 
@@ -116,8 +116,8 @@ fn drain_libinput_events(worker: &mut InputWorker) {
                 if let Some(key) = device_keys.remove(&device) {
                     devices.remove(key.get());
                     sender.send(crate::Token::Input(super::InputEvent {
-                        id: key,
-                        kind: super::Kind::DeviceRemoved,
+                        key,
+                        kind: super::InputEventKind::DeviceRemoved,
                     }));
                 }
             }
@@ -126,8 +126,8 @@ fn drain_libinput_events(worker: &mut InputWorker) {
                 let device = keyboard_event.device();
                 if let Some(key) = device_keys.get(&device) {
                     sender.send(crate::Token::Input(super::InputEvent {
-                        id: *key,
-                        kind: super::Kind::Keyboard {
+                        key: *key,
+                        kind: super::InputEventKind::Keyboard {
                             keycode: keyboard_event.key(),
                             state: keyboard_event.key_state(),
                         },
@@ -139,8 +139,8 @@ fn drain_libinput_events(worker: &mut InputWorker) {
                 let device = pointer_button_event.device();
                 if let Some(key) = device_keys.get(&device) {
                     sender.send(crate::Token::Input(super::InputEvent {
-                        id: *key,
-                        kind: super::Kind::PointerButton {
+                        key: *key,
+                        kind: super::InputEventKind::PointerButton {
                             keycode: pointer_button_event.button(),
                             state: pointer_button_event.button_state(),
                         },
@@ -159,8 +159,10 @@ fn drain_libinput_events(worker: &mut InputWorker) {
 
                         if vertical != 0.0 {
                             sender.send(crate::Token::Input(super::InputEvent {
-                                id: *key,
-                                kind: super::Kind::PointerVerticalScroll { scroll: vertical },
+                                key: *key,
+                                kind: super::InputEventKind::PointerVerticalScroll {
+                                    scroll: vertical,
+                                },
                             }));
                         }
                     }
@@ -172,8 +174,10 @@ fn drain_libinput_events(worker: &mut InputWorker) {
 
                         if horizontal != 0.0 {
                             sender.send(crate::Token::Input(super::InputEvent {
-                                id: *key,
-                                kind: super::Kind::PointerHorizontalScroll { scroll: horizontal },
+                                key: *key,
+                                kind: super::InputEventKind::PointerHorizontalScroll {
+                                    scroll: horizontal,
+                                },
                             }));
                         }
                     }
@@ -184,8 +188,8 @@ fn drain_libinput_events(worker: &mut InputWorker) {
                 let device = motion.device();
                 if let Some(key) = device_keys.get(&device) {
                     sender.send(crate::Token::Input(super::InputEvent {
-                        id: *key,
-                        kind: super::Kind::Motion {
+                        key: *key,
+                        kind: super::InputEventKind::Motion {
                             delta_x: motion.dx(),
                             delta_y: motion.dy(),
                         },

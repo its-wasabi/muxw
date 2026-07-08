@@ -1,6 +1,7 @@
 use std::os::fd::AsFd;
 
 mod client;
+mod seat;
 mod state;
 
 pub struct Compositor {
@@ -10,7 +11,7 @@ pub struct Compositor {
     display: wayland_server::Display<state::State>,
     socket: wayland_server::ListeningSocket,
 
-    // drm_manager: crate::backend::drm::DrmManager,
+    drm_manager: crate::backend::drm::DrmManager,
     renderer: crate::renderer::Renderer,
 
     state: state::State,
@@ -44,6 +45,8 @@ impl Compositor {
             crate::Token::WaylandDisplay,
         )?;
 
+        let drm_manager = crate::backend::drm::DrmManager::new(&mut event_loop)?;
+
         let renderer = crate::renderer::Renderer::new()?;
 
         let state = state::State::new(context, &event_loop)?;
@@ -55,6 +58,7 @@ impl Compositor {
             display,
             socket,
 
+            drm_manager,
             renderer,
 
             state,
@@ -86,21 +90,25 @@ impl Compositor {
                         }
                     }
                     crate::Token::WaylandDisplay => {
-                        println!("Wayland (DISPLAY)");
+                        println!("EV::(WaylandDisplay)");
                         self.display.dispatch_clients(&mut self.state)?;
                         self.display.flush_clients()?;
                     }
                     crate::Token::WaylandClientDisconnected(id) => {
-                        println!("WC-DISCONNECTED: {id:?}");
+                        println!("EV::(WaylandClientDisconnected): {id:?}");
                     }
-                    crate::Token::DrmEvent(event) => {
-                        println!("DRM EVENT: {event:?}");
+                    crate::Token::DrmUdev => {
+                        println!("EV::(DrmUdevMonitor)");
+                        self.drm_manager.dispatch_udev(&mut self.event_loop);
+                    }
+                    crate::Token::DrmCard(drm_card_key) => {
+                        self.drm_manager.dispatch_card(drm_card_key);
                     }
                     crate::Token::Input(event) => {
-                        println!("Input-Event: {event:?}");
+                        println!("EV::(Input): {event:?}");
                     }
                     crate::Token::Config(command) => {
-                        println!("EV::CONFIG::{command:#?}");
+                        println!("EV::(Config):{command:#?}");
                     }
                 }
             }

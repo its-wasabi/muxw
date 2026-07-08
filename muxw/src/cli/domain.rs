@@ -11,6 +11,7 @@ pub struct Cli {
     pub config: Option<std::path::PathBuf>,
 
     /// Set the Wayland socket name
+    // TODO: Think about removing that option, socket should be set in config (if even set)
     #[arg(short, long, value_name = "NAME", global = true)]
     pub socket: Option<String>,
 

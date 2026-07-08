@@ -21,6 +21,12 @@ impl InputManager {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct InputEvent {
+    key: InputDeviceKey,
+    kind: InputEventKind,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InputDeviceKey(usize);
 
@@ -31,13 +37,7 @@ impl InputDeviceKey {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct InputEvent {
-    id: InputDeviceKey,
-    kind: Kind,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Kind {
+pub enum InputEventKind {
     DeviceAdded,
     DeviceRemoved,
     Keyboard {
