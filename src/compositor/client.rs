@@ -1,5 +1,5 @@
 pub struct ClientState {
-    pub event_sender: crate::event_loop::EventSender<crate::Token>,
+    pub event_sender: crate::event_loop::EventSender<crate::token::Token>,
 }
 
 impl wayland_server::backend::ClientData for ClientState {
@@ -13,6 +13,6 @@ impl wayland_server::backend::ClientData for ClientState {
         _reason: wayland_server::backend::DisconnectReason,
     ) {
         self.event_sender
-            .send(crate::Token::WaylandClientDisconnected(client_id));
+            .send(crate::token::Token::WaylandClientDisconnected(client_id));
     }
 }

@@ -7,10 +7,8 @@
 // IMPORTANT: Also error handling here is non-existent if device cant be opened instead of
 // compositor crash it should be simply ignored
 
-use std::os::fd::AsFd;
-
 use drm::Device;
-use rustix::fs::minor;
+use std::os::fd::AsFd;
 
 const DEVICES_DEFAULT_CAPACITY: usize = 1;
 
@@ -23,7 +21,7 @@ pub struct DrmManager {
 
 impl DrmManager {
     pub fn new(
-        event_loop: &mut crate::event_loop::EventLoop<crate::Token>,
+        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let monitor = udev::MonitorBuilder::new()?
             .match_subsystem("drm")?
@@ -31,7 +29,7 @@ impl DrmManager {
         event_loop.register_source(
             &monitor.as_fd(),
             polling::PollMode::Edge,
-            crate::Token::DrmUdev,
+            crate::token::Token::DrmUdev,
         )?;
 
         let mut drm_manager = Self {
@@ -61,7 +59,7 @@ impl DrmManager {
     pub fn register_card(
         &mut self,
         path: &std::path::Path,
-        event_loop: &mut crate::event_loop::EventLoop<crate::Token>,
+        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<DrmCardKey, Box<dyn std::error::Error>> {
         Self::reggister_card_inner(&mut self.cards, path, event_loop)
     }
@@ -69,7 +67,7 @@ impl DrmManager {
     fn reggister_card_inner(
         cards: &mut slab::Slab<DrmCard>,
         path: &std::path::Path,
-        event_loop: &mut crate::event_loop::EventLoop<crate::Token>,
+        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<DrmCardKey, Box<dyn std::error::Error>> {
         // let card = DrmCard::new(path)?;
         let vacant_entry = cards.vacant_entry();
@@ -91,7 +89,10 @@ impl DrmManager {
         cards.remove(key.get());
     }
 
-    pub fn dispatch_udev(&mut self, event_loop: &mut crate::event_loop::EventLoop<crate::Token>) {
+    pub fn dispatch_udev(
+        &mut self,
+        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
+    ) {
         for event in self.monitor.iter() {
             let Some(devnum) = event.devnum() else {
                 unimplemented!("Log here");

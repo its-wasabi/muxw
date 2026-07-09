@@ -5,7 +5,7 @@ pub struct Config {}
 impl Config {
     pub fn spawn(
         path: &std::path::Path,
-        sender: crate::event_loop::EventSender<crate::Token>,
+        sender: crate::event_loop::EventSender<crate::token::Token>,
     ) -> Result<crossbeam_channel::Sender<ConfigCommand>, Box<dyn std::error::Error>> {
         let (command_sender, command_receiver) = crossbeam_channel::unbounded::<ConfigCommand>();
         let path = path.to_path_buf();

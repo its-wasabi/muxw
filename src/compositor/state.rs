@@ -6,7 +6,7 @@ pub struct State {
 impl State {
     pub(super) fn new(
         context: &crate::Context,
-        event_loop: &crate::event_loop::EventLoop<crate::Token>,
+        event_loop: &crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let config_command_sender =
             crate::config::Config::spawn(&context.path.config_file, event_loop.channel_sender())?;

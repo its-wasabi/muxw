@@ -4,8 +4,8 @@ mod client;
 mod state;
 
 pub struct Compositor {
-    event_loop: crate::event_loop::EventLoop<crate::Token>,
-    triggered_events: Vec<crate::Token>,
+    event_loop: crate::event_loop::EventLoop<crate::token::Token>,
+    triggered_events: Vec<crate::token::Token>,
 
     seat: libseat::Seat,
     seat_devices: std::collections::HashMap<std::os::unix::io::RawFd, libseat::Device>,
@@ -27,13 +27,13 @@ impl Compositor {
         println!("BRUH");
         let seat_sender = event_loop.channel_sender();
         let mut seat = libseat::Seat::open(move |_, seat_event| match seat_event {
-            libseat::SeatEvent::Enable => seat_sender.send(crate::Token::SeatEnable),
-            libseat::SeatEvent::Disable => seat_sender.send(crate::Token::SeatDisable),
+            libseat::SeatEvent::Enable => seat_sender.send(crate::token::Token::SeatEnable),
+            libseat::SeatEvent::Disable => seat_sender.send(crate::token::Token::SeatDisable),
         })?;
         event_loop.register_source(
             &seat.get_fd()?,
             polling::PollMode::Level,
-            crate::Token::SeatEvent,
+            crate::token::Token::SeatEvent,
         )?;
         println!("OK");
 
@@ -55,12 +55,12 @@ impl Compositor {
         event_loop.register_source(
             &socket.as_fd(),
             polling::PollMode::Edge,
-            crate::Token::WaylandSocket,
+            crate::token::Token::WaylandSocket,
         )?;
         event_loop.register_source(
             &display.backend().poll_fd().as_fd(),
             polling::PollMode::Edge,
-            crate::Token::WaylandDisplay,
+            crate::token::Token::WaylandDisplay,
         )?;
 
         // let drm_manager = crate::backend::drm::DrmManager::new(&mut event_loop)?;
@@ -92,19 +92,19 @@ impl Compositor {
 
             for token in self.triggered_events.drain(..) {
                 match token {
-                    crate::Token::SeatEvent => {
+                    crate::token::Token::SeatEvent => {
                         if let Err(error) = self.seat.dispatch(0) {
                             unimplemented!("IMPLEMENT REal Logging");
                         }
                     }
 
-                    crate::Token::SeatEnable => {
+                    crate::token::Token::SeatEnable => {
                         // NOTE: You already have DRM master lock via libseat
                         // NOTE: you should call something like resume on drm_manager
                         println!("Seat Enable");
                     }
 
-                    crate::Token::SeatDisable => {
+                    crate::token::Token::SeatDisable => {
                         // NOTE: you should call something like pause on drm_manager
                         println!("Seat Disable");
 
@@ -115,7 +115,7 @@ impl Compositor {
                         }
                     }
 
-                    crate::Token::SeatOpenRequest(open_data) => {
+                    crate::token::Token::SeatOpenRequest(open_data) => {
                         match self.seat.open_device(&&open_data.path) {
                             Ok(device) => {
                                 // device only implements AsFd. We MUST duplicate it for libinput
@@ -154,7 +154,7 @@ impl Compositor {
                         }
                     }
 
-                    crate::Token::SeatCloseRequest(raw_fd) => {
+                    crate::token::Token::SeatCloseRequest(raw_fd) => {
                         if let Some(device) = self.seat_devices.remove(&raw_fd) {
                             if let Err(error) = self.seat.close_device(device) {
                                 unimplemented!("REAL LOGGING");
@@ -162,7 +162,7 @@ impl Compositor {
                         }
                     }
 
-                    crate::Token::WaylandSocket => {
+                    crate::token::Token::WaylandSocket => {
                         if let Some(stream) = self.socket.accept()? {
                             let mut display_handle = self.display.handle();
                             let client_state = client::ClientState {
@@ -180,25 +180,25 @@ impl Compositor {
                             }
                         }
                     }
-                    crate::Token::WaylandDisplay => {
+                    crate::token::Token::WaylandDisplay => {
                         println!("EV::(WaylandDisplay)");
                         self.display.dispatch_clients(&mut self.state)?;
                         self.display.flush_clients()?;
                     }
-                    crate::Token::WaylandClientDisconnected(id) => {
+                    crate::token::Token::WaylandClientDisconnected(id) => {
                         println!("EV::(WaylandClientDisconnected): {id:?}");
                     }
-                    crate::Token::DrmUdev => {
+                    crate::token::Token::DrmUdev => {
                         println!("EV::(DrmUdevMonitor)");
                         // self.drm_manager.dispatch_udev(&mut self.event_loop);
                     }
-                    crate::Token::DrmCard(drm_card_key) => {
+                    crate::token::Token::DrmCard(drm_card_key) => {
                         // self.drm_manager.dispatch_card(drm_card_key);
                     }
-                    crate::Token::Input(event) => {
+                    crate::token::Token::Input(event) => {
                         println!("EV::(Input): {event:?}");
                     }
-                    crate::Token::Config(command) => {
+                    crate::token::Token::Config(command) => {
                         println!("EV::(Config):{command:#?}");
                     }
                 }

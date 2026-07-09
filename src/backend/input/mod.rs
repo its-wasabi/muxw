@@ -5,12 +5,12 @@ pub struct InputManager {
     // TODO: Kept for possibility of future runtime configuration of worker thread
     // If its truly unnecessary remove it
     #[allow(unused)]
-    worker_sender: crate::event_loop::EventSender<worker::Token>,
+    worker_sender: crate::event_loop::EventSender<worker::InputToken>,
 }
 
 impl InputManager {
     pub fn new(
-        sender: crate::event_loop::EventSender<crate::Token>,
+        sender: crate::event_loop::EventSender<crate::token::Token>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let (worker_sender, worker_resources) = worker::InputWorker::new(sender)?;
 

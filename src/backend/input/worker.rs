@@ -2,9 +2,9 @@ use input::event::{EventTrait, keyboard::KeyboardEventTrait, pointer::PointerScr
 use std::os::fd::{AsFd, AsRawFd};
 
 pub struct InputWorker {
-    event_loop: crate::event_loop::EventLoop<Token>,
+    event_loop: crate::event_loop::EventLoop<InputToken>,
     libinput: input::Libinput,
-    sender: crate::event_loop::EventSender<crate::Token>,
+    sender: crate::event_loop::EventSender<crate::token::Token>,
 
     devices: slab::Slab<input::Device>,
     device_keys: std::collections::HashMap<input::Device, super::InputDeviceKey>,
@@ -12,8 +12,9 @@ pub struct InputWorker {
 
 impl InputWorker {
     pub fn new(
-        sender: crate::event_loop::EventSender<crate::Token>,
-    ) -> Result<(crate::event_loop::EventSender<Token>, Self), Box<dyn std::error::Error>> {
+        sender: crate::event_loop::EventSender<crate::token::Token>,
+    ) -> Result<(crate::event_loop::EventSender<InputToken>, Self), Box<dyn std::error::Error>>
+    {
         let mut event_loop = crate::event_loop::EventLoop::new()?;
 
         let mut libinput = input::Libinput::new_with_udev(LibinputInterface {
@@ -22,7 +23,11 @@ impl InputWorker {
         // TODO: Handle error
         // TODO: make that configurable and automatic
         libinput.udev_assign_seat("seat0");
-        event_loop.register_source(&libinput.as_fd(), polling::PollMode::Edge, Token::Libinput)?;
+        event_loop.register_source(
+            &libinput.as_fd(),
+            polling::PollMode::Edge,
+            InputToken::Libinput,
+        )?;
 
         Ok((
             event_loop.channel_sender(),
@@ -47,12 +52,12 @@ impl InputWorker {
 unsafe impl Send for InputWorker {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum Token {
+pub(super) enum InputToken {
     Libinput,
 }
 
 pub struct LibinputInterface {
-    sender: crate::event_loop::EventSender<crate::Token>,
+    sender: crate::event_loop::EventSender<crate::token::Token>,
 }
 
 impl input::LibinputInterface for LibinputInterface {
@@ -62,12 +67,13 @@ impl input::LibinputInterface for LibinputInterface {
         flags: i32,
     ) -> std::result::Result<std::os::fd::OwnedFd, i32> {
         let (reply, response) = crossbeam_channel::bounded(1);
-        self.sender.send(crate::Token::SeatOpenRequest(Box::new(
-            crate::SeatOpenData {
-                path: path.to_path_buf(),
-                reply,
-            },
-        )));
+        self.sender
+            .send(crate::token::Token::SeatOpenRequest(Box::new(
+                crate::token::SeatOpenData {
+                    path: path.to_path_buf(),
+                    reply,
+                },
+            )));
 
         response.recv().unwrap_or(Err(-13))
     }
@@ -75,7 +81,8 @@ impl input::LibinputInterface for LibinputInterface {
     fn close_restricted(&mut self, fd: std::os::fd::OwnedFd) {
         let raw_fd = fd.as_raw_fd();
         std::mem::drop(fd);
-        self.sender.send(crate::Token::SeatCloseRequest(raw_fd));
+        self.sender
+            .send(crate::token::Token::SeatCloseRequest(raw_fd));
     }
 }
 
@@ -92,7 +99,7 @@ pub fn run_input_worker_thread(mut worker: InputWorker) -> ! {
 
         for token in &triggered {
             match token {
-                Token::Libinput => drain_libinput_events(&mut worker),
+                InputToken::Libinput => drain_libinput_events(&mut worker),
             }
         }
     }
@@ -118,7 +125,7 @@ fn drain_libinput_events(worker: &mut InputWorker) {
                 let device = device_add_event.device();
                 let key = super::InputDeviceKey(devices.insert(device.clone()));
                 device_keys.insert(device, key);
-                sender.send(crate::Token::Input(super::InputEvent {
+                sender.send(crate::token::Token::Input(super::InputEvent {
                     key,
                     kind: super::InputEventKind::DeviceAdded,
                 }));
@@ -128,7 +135,7 @@ fn drain_libinput_events(worker: &mut InputWorker) {
                 let device = device_remove_event.device();
                 if let Some(key) = device_keys.remove(&device) {
                     devices.remove(key.get());
-                    sender.send(crate::Token::Input(super::InputEvent {
+                    sender.send(crate::token::Token::Input(super::InputEvent {
                         key,
                         kind: super::InputEventKind::DeviceRemoved,
                     }));
@@ -138,7 +145,7 @@ fn drain_libinput_events(worker: &mut InputWorker) {
             input::Event::Keyboard(keyboard_event) => {
                 let device = keyboard_event.device();
                 if let Some(key) = device_keys.get(&device) {
-                    sender.send(crate::Token::Input(super::InputEvent {
+                    sender.send(crate::token::Token::Input(super::InputEvent {
                         key: *key,
                         kind: super::InputEventKind::Keyboard {
                             keycode: keyboard_event.key(),
@@ -151,7 +158,7 @@ fn drain_libinput_events(worker: &mut InputWorker) {
             input::Event::Pointer(input::event::PointerEvent::Button(pointer_button_event)) => {
                 let device = pointer_button_event.device();
                 if let Some(key) = device_keys.get(&device) {
-                    sender.send(crate::Token::Input(super::InputEvent {
+                    sender.send(crate::token::Token::Input(super::InputEvent {
                         key: *key,
                         kind: super::InputEventKind::PointerButton {
                             keycode: pointer_button_event.button(),
@@ -171,7 +178,7 @@ fn drain_libinput_events(worker: &mut InputWorker) {
                             .scroll_value(input::event::pointer::Axis::Vertical);
 
                         if vertical != 0.0 {
-                            sender.send(crate::Token::Input(super::InputEvent {
+                            sender.send(crate::token::Token::Input(super::InputEvent {
                                 key: *key,
                                 kind: super::InputEventKind::PointerVerticalScroll {
                                     scroll: vertical,
@@ -186,7 +193,7 @@ fn drain_libinput_events(worker: &mut InputWorker) {
                             .scroll_value(input::event::pointer::Axis::Horizontal);
 
                         if horizontal != 0.0 {
-                            sender.send(crate::Token::Input(super::InputEvent {
+                            sender.send(crate::token::Token::Input(super::InputEvent {
                                 key: *key,
                                 kind: super::InputEventKind::PointerHorizontalScroll {
                                     scroll: horizontal,
@@ -200,7 +207,7 @@ fn drain_libinput_events(worker: &mut InputWorker) {
             input::Event::Pointer(input::event::PointerEvent::Motion(motion)) => {
                 let device = motion.device();
                 if let Some(key) = device_keys.get(&device) {
-                    sender.send(crate::Token::Input(super::InputEvent {
+                    sender.send(crate::token::Token::Input(super::InputEvent {
                         key: *key,
                         kind: super::InputEventKind::Motion {
                             delta_x: motion.dx(),
