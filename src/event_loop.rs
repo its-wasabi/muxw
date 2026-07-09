@@ -241,6 +241,7 @@ impl Ord for Timer {
     }
 }
 
+#[derive(Clone)]
 pub struct EventSender<T> {
     sender: crossbeam_channel::Sender<T>,
     poller: std::sync::Arc<polling::Poller>,

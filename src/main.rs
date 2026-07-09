@@ -46,6 +46,12 @@ impl Context {
 // NotifyData(String) -> String in heap is also not good
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
+    SeatEvent,
+    SeatEnable,
+    SeatDisable,
+    SeatOpenRequest(Box<SeatOpenData>),
+    SeatCloseRequest(std::os::fd::RawFd),
+
     WaylandSocket,
     WaylandDisplay,
     WaylandClientDisconnected(wayland_server::backend::ClientId),
@@ -55,6 +61,18 @@ enum Token {
 
     Input(backend::input::InputEvent),
     Config(config::ConfigRequest),
+}
+
+#[derive(Debug, Clone)]
+struct SeatOpenData {
+    path: std::path::PathBuf,
+    reply: crossbeam_channel::Sender<Result<std::os::fd::OwnedFd, i32>>,
+}
+
+impl PartialEq for SeatOpenData {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

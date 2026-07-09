@@ -1,6 +1,5 @@
 pub struct Seat {
-    pub keyboards:
-        std::collections::HashMap<crate::backend::input::InputDeviceKey, LogicalKeyboard>,
+    pub keyboards: std::collections::HashMap<super::InputDeviceKey, Keyboard>,
 }
 
 impl Seat {
@@ -11,6 +10,8 @@ impl Seat {
     }
 
     pub fn add_keyboard(&mut self) {
+        // TODO: Handle that Option unwrap and check internals of xkb and optionally look for
+        // replacement crate
         let ctx = xkbcommon::xkb::Context::new(xkbcommon::xkb::CONTEXT_NO_FLAGS);
         let keymap = xkbcommon::xkb::Keymap::new_from_names(
             &ctx,
@@ -33,7 +34,7 @@ impl Seat {
     }
 }
 
-pub struct LogicalKeyboard {
+pub struct Keyboard {
     pub xkb_state: xkbcommon::xkb::State,
     pub keymap: xkbcommon::xkb::Keymap,
 }

@@ -1,5 +1,5 @@
 use input::event::{EventTrait, keyboard::KeyboardEventTrait, pointer::PointerScrollEvent};
-use std::os::fd::AsFd;
+use std::os::fd::{AsFd, AsRawFd};
 
 pub struct InputWorker {
     event_loop: crate::event_loop::EventLoop<Token>,
@@ -16,8 +16,11 @@ impl InputWorker {
     ) -> Result<(crate::event_loop::EventSender<Token>, Self), Box<dyn std::error::Error>> {
         let mut event_loop = crate::event_loop::EventLoop::new()?;
 
-        let mut libinput = input::Libinput::new_with_udev(LibinputInterface {});
+        let mut libinput = input::Libinput::new_with_udev(LibinputInterface {
+            sender: sender.clone(),
+        });
         // TODO: Handle error
+        // TODO: make that configurable and automatic
         libinput.udev_assign_seat("seat0");
         event_loop.register_source(&libinput.as_fd(), polling::PollMode::Edge, Token::Libinput)?;
 
@@ -48,7 +51,9 @@ pub(super) enum Token {
     Libinput,
 }
 
-pub struct LibinputInterface {}
+pub struct LibinputInterface {
+    sender: crate::event_loop::EventSender<crate::Token>,
+}
 
 impl input::LibinputInterface for LibinputInterface {
     fn open_restricted(
@@ -56,13 +61,21 @@ impl input::LibinputInterface for LibinputInterface {
         path: &std::path::Path,
         flags: i32,
     ) -> std::result::Result<std::os::fd::OwnedFd, i32> {
-        let oflags = rustix::fs::OFlags::from_bits_truncate(flags.cast_unsigned());
-        rustix::fs::open(path, oflags, rustix::fs::Mode::empty())
-            .map_err(rustix::io::Errno::raw_os_error)
+        let (reply, response) = crossbeam_channel::bounded(1);
+        self.sender.send(crate::Token::SeatOpenRequest(Box::new(
+            crate::SeatOpenData {
+                path: path.to_path_buf(),
+                reply,
+            },
+        )));
+
+        response.recv().unwrap_or(Err(-13))
     }
 
     fn close_restricted(&mut self, fd: std::os::fd::OwnedFd) {
-        std::mem::drop(std::fs::File::from(fd));
+        let raw_fd = fd.as_raw_fd();
+        std::mem::drop(fd);
+        self.sender.send(crate::Token::SeatCloseRequest(raw_fd));
     }
 }
 

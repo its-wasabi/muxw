@@ -3,10 +3,14 @@
 // 3. Config API for card selection
 
 // IMPORTANT: Hold event_loop key to deregister event source when removing device
+// IMPORTANT: Merge monitor and enumerator device registration logic (mostly is_primary check)
+// IMPORTANT: Also error handling here is non-existent if device cant be opened instead of
+// compositor crash it should be simply ignored
 
 use std::os::fd::AsFd;
 
 use drm::Device;
+use rustix::fs::minor;
 
 const DEVICES_DEFAULT_CAPACITY: usize = 1;
 
@@ -67,15 +71,15 @@ impl DrmManager {
         path: &std::path::Path,
         event_loop: &mut crate::event_loop::EventLoop<crate::Token>,
     ) -> Result<DrmCardKey, Box<dyn std::error::Error>> {
-        let card = DrmCard::new(path)?;
+        // let card = DrmCard::new(path)?;
         let vacant_entry = cards.vacant_entry();
         let key = DrmCardKey(vacant_entry.key());
-        event_loop.register_source(
-            &card.as_fd(),
-            polling::PollMode::Edge,
-            crate::Token::DrmCard(key),
-        )?;
-        vacant_entry.insert(card);
+        // event_loop.register_source(
+        //     &card.as_fd(),
+        //     polling::PollMode::Edge,
+        //     crate::Token::DrmCard(key),
+        // )?;
+        // vacant_entry.insert(card);
         Ok(key)
     }
 
@@ -89,31 +93,35 @@ impl DrmManager {
 
     pub fn dispatch_udev(&mut self, event_loop: &mut crate::event_loop::EventLoop<crate::Token>) {
         for event in self.monitor.iter() {
-            let devnum = event.devnum();
+            let Some(devnum) = event.devnum() else {
+                unimplemented!("Log here");
+                continue;
+            };
+
+            if rustix::fs::minor(devnum) > 63 {
+                println!("Skipping (NOT A CARD NODE)");
+                continue;
+            }
 
             match event.event_type() {
                 udev::EventType::Add => {
-                    if let (Some(path), Some(dev)) = (event.devnode(), devnum)
+                    if let Some(path) = event.devnode()
                         && let Ok(key) =
                             Self::reggister_card_inner(&mut self.cards, path, event_loop)
                     {
-                        self.device_keys.insert(dev, key);
+                        self.device_keys.insert(devnum, key);
                     }
                 }
 
                 udev::EventType::Change => {
-                    if let Some(dev) = devnum
-                        && let Some(key) = self.device_keys.get(&dev)
-                    {
+                    if let Some(key) = self.device_keys.get(&devnum) {
                         println!("Device connector state changed for card {}", key.get());
                         // TODO: Probing logic
                     }
                 }
 
                 udev::EventType::Remove => {
-                    if let Some(dev) = devnum
-                        && let Some(key) = self.device_keys.remove(&dev)
-                    {
+                    if let Some(key) = self.device_keys.remove(&devnum) {
                         Self::deregister_card_inner(&mut self.cards, key);
                     }
                 }
@@ -127,19 +135,31 @@ impl DrmManager {
     }
 }
 
-struct DrmCard(std::fs::File);
+struct DrmCard {
+    file: std::fs::File,
+    devnum: u64,
+    event_loop_key: crate::event_loop::IoKey,
+}
 
 impl DrmCard {
-    fn new(path: &std::path::Path) -> Result<Self, Box<dyn std::error::Error>> {
-        let card = Self(
-            std::fs::OpenOptions::new()
+    fn new(
+        path: &std::path::Path,
+        devnum: u64,
+        ev_key: crate::event_loop::IoKey,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let card = Self {
+            file: std::fs::OpenOptions::new()
                 .read(true)
                 .write(true)
                 .open(path)?,
-        );
+            devnum,
 
-        card.set_client_capability(drm::ClientCapability::UniversalPlanes, true)?;
-        card.set_client_capability(drm::ClientCapability::Atomic, true)?;
+            // TODO: Thinking about making event_loop registration part of Self::new foo
+            event_loop_key: ev_key,
+        };
+
+        // card.set_client_capability(drm::ClientCapability::UniversalPlanes, true)?;
+        // card.set_client_capability(drm::ClientCapability::Atomic, true)?;
 
         Ok(card)
     }
@@ -147,7 +167,7 @@ impl DrmCard {
 
 impl std::os::fd::AsFd for DrmCard {
     fn as_fd(&self) -> std::os::unix::prelude::BorrowedFd<'_> {
-        self.0.as_fd()
+        self.file.as_fd()
     }
 }
 

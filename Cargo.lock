@@ -184,12 +184,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "const_fn"
-version = "0.4.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413d67b29ef1021b4d60f4aa1e925ca031751e213832b4b1d588fae623c05c60"
-
-[[package]]
 name = "convert_case"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -411,6 +405,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "libseat"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6656c69b6e0366ffb83faa232f3e4fda5fc91161722d140f2c95ce2e90b1ef31"
+dependencies = [
+ "cc",
+ "errno",
+ "libseat-sys",
+ "log",
+ "pkg-config",
+]
+
+[[package]]
+name = "libseat-sys"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8a484fa48be5f62a8d3ffed767779d0ab808cfead91de98ef4362d469097dfb"
+dependencies = [
+ "pkg-config",
+]
+
+[[package]]
 name = "libudev-sys"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -565,10 +581,10 @@ dependencies = [
  "drm 0.15.0",
  "gbm",
  "input",
+ "libseat",
  "log",
  "mlua",
  "multi_index_map",
- "muxw-types",
  "polling",
  "rustc-hash",
  "rustix 1.1.4",
@@ -578,17 +594,6 @@ dependencies = [
  "wayland-protocols",
  "wayland-server",
  "xkbcommon",
-]
-
-[[package]]
-name = "muxw-types"
-version = "0.1.0"
-dependencies = [
- "input",
- "libc",
- "mlua",
- "serde",
- "typed_floats",
 ]
 
 [[package]]
@@ -856,29 +861,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "typed_floats"
-version = "1.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "436de2fdc42c0f07890f4b51dcc90a468b0b12280f49caff1cf57ce2e646817c"
-dependencies = [
- "const_fn",
- "rustversion",
- "typed_floats_macros",
-]
-
-[[package]]
-name = "typed_floats_macros"
-version = "1.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da27e33675dd7bfc62c7ead8c36779f961815ababe717191d67b75c2356edc4f"
-dependencies = [
- "proc-macro2",
- "quote",
- "rustversion",
- "syn 2.0.118",
 ]
 
 [[package]]
