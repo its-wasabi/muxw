@@ -71,7 +71,7 @@ impl Config {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(path, crate::DEFAULT_CONFIG)
+        std::fs::write(path, crate::helpers::DEFAULT_CONFIG)
     }
 }
 
