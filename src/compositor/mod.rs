@@ -7,8 +7,7 @@ pub struct Compositor {
     event_loop: crate::event_loop::EventLoop<crate::token::Token>,
     triggered_events: Vec<crate::token::Token>,
 
-    seat: libseat::Seat,
-    seat_devices: std::collections::HashMap<std::os::unix::io::RawFd, libseat::Device>,
+    seat: crate::backend::seat::SeatManager,
 
     display: wayland_server::Display<state::State>,
     socket: wayland_server::ListeningSocket,
@@ -20,25 +19,11 @@ pub struct Compositor {
 }
 
 impl Compositor {
-    pub fn new(context: &crate::Context) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(context: &crate::context::Context) -> Result<Self, Box<dyn std::error::Error>> {
         let mut event_loop = crate::event_loop::EventLoop::new()?;
         let triggered_events = Vec::new();
 
-        println!("BRUH");
-        let seat_sender = event_loop.sender();
-        let mut seat = libseat::Seat::open(move |_, seat_event| match seat_event {
-            libseat::SeatEvent::Enable => seat_sender.send(crate::token::Token::SeatEnable),
-            libseat::SeatEvent::Disable => seat_sender.send(crate::token::Token::SeatDisable),
-        })?;
-        event_loop.register_source(
-            &seat.get_fd()?,
-            polling::PollMode::Level,
-            crate::token::Token::SeatEvent,
-        )?;
-        println!("OK");
-
-        // TODO: Fine tune the capacity
-        let seat_devices = std::collections::HashMap::with_capacity(10);
+        let seat = crate::backend::seat::SeatManager::new(&mut event_loop)?;
 
         let mut display = wayland_server::Display::new()?;
         let display_handle = display.handle();
@@ -69,12 +54,16 @@ impl Compositor {
 
         let state = state::State::new(context, &event_loop)?;
 
+        event_loop.register_timer(
+            crate::event_loop::TimerMode::Delay(std::time::Duration::from_secs(1)),
+            crate::token::Token::Shutdown,
+        );
+
         Ok(Self {
             event_loop,
             triggered_events,
 
             seat,
-            seat_devices,
 
             display,
             socket,
@@ -91,75 +80,35 @@ impl Compositor {
             self.event_loop.dispatch(&mut self.triggered_events)?;
 
             for token in self.triggered_events.drain(..) {
+                let _span_guard = tracing::debug_span!("event", ?token).entered();
+
                 match token {
                     crate::token::Token::SeatEvent => {
-                        if let Err(error) = self.seat.dispatch(0) {
-                            unimplemented!("IMPLEMENT REal Logging");
+                        if let Err(error) = self.seat.dispatch() {
+                            tracing::error!(?error, "Failed to dispatch libseat seat");
                         }
                     }
 
                     crate::token::Token::SeatEnable => {
-                        // NOTE: You already have DRM master lock via libseat
-                        // NOTE: you should call something like resume on drm_manager
-                        println!("Seat Enable");
+                        tracing::debug!("Seat Enable");
                     }
 
                     crate::token::Token::SeatDisable => {
-                        // NOTE: you should call something like pause on drm_manager
-                        println!("Seat Disable");
+                        tracing::debug!("Seat Disable");
 
                         if let Err(error) = self.seat.disable() {
                             // FIXME: Handle error like ignore seat disable not working at least
                             // drop DRM master lock or something if libseat didn't do already
-                            unimplemented!("Implement logging");
+                            tracing::error!(?error, "Failed to ack Seat Disable");
                         }
                     }
 
                     crate::token::Token::SeatOpenRequest(open_data) => {
-                        match self.seat.open_device(&&open_data.path) {
-                            Ok(device) => {
-                                // device only implements AsFd. We MUST duplicate it for libinput
-                                // so libinput gets its own descriptor to manage and drop.
-                                match rustix::io::dup(device.as_fd()) {
-                                    Ok(owned_fd) => {
-                                        use std::os::unix::io::AsRawFd;
-                                        let raw_fd = owned_fd.as_raw_fd();
-
-                                        // Store the `Device` lease in the map keyed by the new RawFd.
-                                        // If we don't store it, it drops, and the seat daemon might revoke it!
-                                        self.seat_devices.insert(raw_fd, device);
-
-                                        let _ = open_data.reply.send(Ok(owned_fd));
-                                    }
-                                    Err(_) => {
-                                        // Dup failed. Immediately return the lease to libseat.
-                                        if let Err(e) = self.seat.close_device(device) {
-                                            log::error!(
-                                                "Failed to close device after dup error: {:?}",
-                                                e
-                                            );
-                                        }
-                                        let _ = open_data.reply.send(Err(-1));
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                log::error!(
-                                    "Seat failed to open device {:?}: {:?}",
-                                    open_data.path,
-                                    e
-                                );
-                                let _ = open_data.reply.send(Err(-13));
-                            }
-                        }
+                        self.seat.open_device(open_data)?;
                     }
 
                     crate::token::Token::SeatCloseRequest(raw_fd) => {
-                        if let Some(device) = self.seat_devices.remove(&raw_fd) {
-                            if let Err(error) = self.seat.close_device(device) {
-                                unimplemented!("REAL LOGGING");
-                            }
-                        }
+                        self.seat.close_device(raw_fd)?;
                     }
 
                     crate::token::Token::WaylandSocket => {
@@ -173,33 +122,48 @@ impl Compositor {
                                 .insert_client(stream, std::sync::Arc::new(client_state))?;
 
                             if let Ok(credentials) = client.get_credentials(&display_handle) {
-                                println!(
-                                    "New client: PID: {}, UID: {}, GID: {}",
-                                    credentials.pid, credentials.uid, credentials.gid
+                                tracing::info!(
+                                    pid = credentials.pid,
+                                    uid = credentials.uid,
+                                    gid = credentials.gid,
+                                    "New Wayland client connected"
+                                );
+                            } else {
+                                tracing::info!(
+                                    "New Wayland client connected (credentials unavailable)"
                                 );
                             }
                         }
                     }
                     crate::token::Token::WaylandDisplay => {
-                        println!("EV::(WaylandDisplay)");
+                        tracing::trace!("Dispatching Wayland display clients");
                         self.display.dispatch_clients(&mut self.state)?;
                         self.display.flush_clients()?;
                     }
                     crate::token::Token::WaylandClientDisconnected(id) => {
-                        println!("EV::(WaylandClientDisconnected): {id:?}");
+                        tracing::info!(?id, "Wayland client disconnected");
                     }
                     crate::token::Token::DrmUdev => {
-                        println!("EV::(DrmUdevMonitor)");
-                        // self.drm_manager.dispatch_udev(&mut self.event_loop);
+                        tracing::trace!("DrmUdev monitor event triggered");
                     }
                     crate::token::Token::DrmCard(drm_card_key) => {
-                        // self.drm_manager.dispatch_card(drm_card_key);
+                        tracing::trace!(?drm_card_key, "DrmCard event triggered");
                     }
                     crate::token::Token::Input(event) => {
-                        println!("EV::(Input): {event:?}");
+                        tracing::debug!(?event, "Input event received");
                     }
                     crate::token::Token::Config(command) => {
-                        println!("EV::(Config):{command:#?}");
+                        tracing::debug!(?command, "Config command received");
+                    }
+
+                    crate::token::Token::Shutdown => {
+                        tracing::debug!("Exiting");
+
+                        if let Err(error) = self.seat.disable() {
+                            tracing::error!(?error, "Failed to ack Seat Disable during Shutdown");
+                        }
+
+                        return Ok(());
                     }
                 }
             }

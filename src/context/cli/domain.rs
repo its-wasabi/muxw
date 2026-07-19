@@ -15,6 +15,10 @@ pub struct Cli {
     #[arg(short, long, value_name = "NAME", global = true)]
     pub socket: Option<String>,
 
+    // TODO: Use enum here instead of plain string
+    #[arg(short, long, value_name = "PATH | stdout | stderr", global = true)]
+    pub log_to: Option<String>,
+
     /// Output in JSON format
     #[arg(short, long, global = true)]
     pub json: bool,

@@ -1,4 +1,4 @@
-#[path = "src/cli/domain.rs"]
+#[path = "src/context/cli/domain.rs"]
 mod domain;
 
 use clap::CommandFactory;

@@ -7,9 +7,6 @@
 // IMPORTANT: Also error handling here is non-existent if device cant be opened instead of
 // compositor crash it should be simply ignored
 
-use drm::Device;
-use std::os::fd::AsFd;
-
 const DEVICES_DEFAULT_CAPACITY: usize = 1;
 
 pub struct DrmManager {
@@ -23,6 +20,7 @@ impl DrmManager {
     pub fn new(
         event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        use std::os::fd::AsFd;
         let monitor = udev::MonitorBuilder::new()?
             .match_subsystem("drm")?
             .listen()?;
@@ -159,10 +157,16 @@ impl DrmCard {
             event_loop_key: ev_key,
         };
 
-        // card.set_client_capability(drm::ClientCapability::UniversalPlanes, true)?;
-        // card.set_client_capability(drm::ClientCapability::Atomic, true)?;
+        card.set_atomic_universal_planes(true);
 
         Ok(card)
+    }
+
+    fn set_atomic_universal_planes(&self, enable: bool) -> std::io::Result<()> {
+        use drm::Device;
+        self.set_client_capability(drm::ClientCapability::UniversalPlanes, enable)?;
+        self.set_client_capability(drm::ClientCapability::Atomic, enable)?;
+        Ok(())
     }
 }
 

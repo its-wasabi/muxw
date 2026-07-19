@@ -1,51 +1,3 @@
-fn to_absolute(path: std::path::PathBuf) -> Result<std::path::PathBuf, crate::error::PathError> {
-    let absolute_path = if path.is_absolute() {
-        path
-    } else {
-        std::env::current_dir()
-            .map_err(|err| crate::error::PathError::Io {
-                action: "et current directory",
-                path: None,
-                source: err,
-            })?
-            .join(path)
-    };
-
-    absolute_path
-        .canonicalize()
-        .map_err(|err| crate::error::PathError::Io {
-            action: "anonicalize path",
-            path: Some(absolute_path),
-            source: err,
-        })
-}
-
-fn expand_tilde(path: std::path::PathBuf) -> Result<std::path::PathBuf, crate::error::PathError> {
-    let str = path.to_string_lossy();
-
-    if !str.starts_with('~') {
-        return Ok(path);
-    }
-
-    let home = std::env::var("HOME").map_err(|_| crate::error::PathError::InvalidPath {
-        input: path.clone(),
-        reason: "HOME environment variable not set",
-    })?;
-
-    let expanded = if str == "~" {
-        std::path::PathBuf::from(home)
-    } else if str.starts_with("~/") {
-        std::path::PathBuf::from(home).join(&str[2..])
-    } else {
-        return Err(crate::error::PathError::InvalidPath {
-            input: path,
-            reason: "unsupported tilde expansion (Report an issue)",
-        });
-    };
-
-    Ok(expanded)
-}
-
 #[derive(Debug)]
 pub struct Path {
     pub config_dir: std::path::PathBuf,
@@ -81,11 +33,11 @@ impl Path {
         path: std::path::PathBuf,
     ) -> Result<(std::path::PathBuf, std::path::PathBuf), crate::error::PathError> {
         let config = if path.is_dir() {
-            let config_dir = to_absolute(path)?;
+            let config_dir = super::to_absolute(path)?;
             let config_file = config_dir.join(Self::get_config_filename());
             (config_dir, config_file)
         } else {
-            let config_file = to_absolute(path)?;
+            let config_file = super::to_absolute(path)?;
             let config_dir = config_file
                 .parent()
                 .ok_or(crate::error::PathError::InvalidPath {
@@ -105,13 +57,13 @@ impl Path {
         if let Ok(muxw_env) = std::env::var("MUXW_CONFIG_PATH") {
             if !muxw_env.is_empty() {
                 let path = std::path::PathBuf::from(muxw_env);
-                let path = expand_tilde(path)?;
+                let path = super::expand_tilde(path)?;
                 if path.is_dir() {
-                    let config_dir = to_absolute(path)?;
+                    let config_dir = super::to_absolute(path)?;
                     let config_file = config_dir.join(Self::get_config_filename());
                     return Ok(Some((config_dir, config_file)));
                 } else {
-                    let config_file = to_absolute(path)?;
+                    let config_file = super::to_absolute(path)?;
                     let config_dir = config_file
                         .parent()
                         .ok_or(crate::error::PathError::InvalidPath {

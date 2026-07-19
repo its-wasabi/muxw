@@ -15,27 +15,21 @@ impl InputWorker {
         sender: crate::event_loop::EventSender<crate::token::Token>,
     ) -> Result<(crate::event_loop::EventSender<InputToken>, Self), Box<dyn std::error::Error>>
     {
-        println!("INPUT WORKER - START");
-        let mut event_loop = crate::event_loop::EventLoop::new()?;
-
-        println!("INPUT WORKER (libinput instance) - START");
+        let mut inner_event_loop = crate::event_loop::EventLoop::new()?;
         let mut libinput = input::Libinput::new_with_udev(LibinputInterface {
             sender: sender.clone(),
         });
-        println!("INPUT WORKER (Assign udev seat \"seat0\")");
 
-        event_loop.register_source(
+        inner_event_loop.register_source(
             &libinput.as_fd(),
             polling::PollMode::Edge,
             InputToken::Libinput,
         )?;
 
-        println!("INPUT WORKER (libinput instance) - DONE");
-
         Ok((
-            event_loop.sender(),
+            inner_event_loop.sender(),
             Self {
-                event_loop,
+                event_loop: inner_event_loop,
                 libinput,
                 sender,
                 devices: slab::Slab::with_capacity(1),
@@ -69,8 +63,8 @@ impl input::LibinputInterface for LibinputInterface {
         path: &std::path::Path,
         flags: i32,
     ) -> std::result::Result<std::os::fd::OwnedFd, i32> {
-        println!("DEV OPEN: {}", path.display());
         let (reply, response) = crossbeam_channel::bounded(1);
+
         self.sender
             .send(crate::token::Token::SeatOpenRequest(Box::new(
                 crate::token::SeatOpenData {
@@ -79,7 +73,11 @@ impl input::LibinputInterface for LibinputInterface {
                 },
             )));
 
-        response.recv().unwrap_or(Err(-13))
+        match response.recv() {
+            Ok(Ok(fd)) => Ok(fd),
+            Ok(Err(io_error)) => Err(io_error.raw_os_error().unwrap_or(13)),
+            Err(_) => Err(13),
+        }
     }
 
     fn close_restricted(&mut self, fd: std::os::fd::OwnedFd) {
@@ -92,18 +90,22 @@ impl input::LibinputInterface for LibinputInterface {
 
 #[allow(clippy::needless_pass_by_value)]
 pub fn run_input_worker_thread(mut worker: InputWorker) -> ! {
-    // TODO: Handle error
-    // TODO: make that configurable and automatic
-    // TODO: Think if you should move it back?. Also find out why it was blocking normal compositor
-    // operation
-    worker.libinput.udev_assign_seat("seat0");
+    let seat = "seat0";
+
+    let _span_guard = tracing::error_span!("input", ?seat).entered();
+
+    if worker.libinput.udev_assign_seat(seat) == Err(()) {
+        todo!(
+            "Move seat initialization into InputWorger::new() or make it fully dynamic not and configurable"
+        );
+    }
 
     let mut triggered = Vec::with_capacity(4);
     drain_libinput_events(&mut worker);
 
     loop {
         if let Err(error) = worker.event_loop.dispatch(&mut triggered) {
-            log::error!("Input worker failed to dispatch EventLoop: {error:?}");
+            tracing::error!(?error, "Input worker failed to dispatch EventLoop");
             continue;
         }
 
@@ -125,7 +127,7 @@ fn drain_libinput_events(worker: &mut InputWorker) {
     } = worker;
 
     if let Err(error) = libinput.dispatch() {
-        log::error!("Input worker failed to dispatch Libinput: {error:?}");
+        tracing::error!(?error, "Input worker failed to dispatch libinput");
         return;
     }
 

@@ -21,12 +21,14 @@ pub enum Token {
 
     Input(crate::backend::input::InputEvent),
     Config(crate::config::ConfigRequest),
+
+    Shutdown,
 }
 
 #[derive(Debug, Clone)]
 pub struct SeatOpenData {
     pub path: std::path::PathBuf,
-    pub reply: crossbeam_channel::Sender<Result<std::os::fd::OwnedFd, i32>>,
+    pub reply: crossbeam_channel::Sender<Result<std::os::fd::OwnedFd, std::io::Error>>,
 }
 
 impl PartialEq for SeatOpenData {

@@ -10,6 +10,11 @@ repository = "https://github.com/Fasamii/muxw"
 description = "Hyperextensible Wayland compositor"
 
 [dependencies]
+log = { version = "0.4.22", features = ["max_level_trace", "release_max_level_warn"] }
+tracing = { version = "0.1.44", features = ["max_level_trace", "release_max_level_warn"] }
+tracing-subscriber = { version = "0.3.23", features = ["fmt"] }
+tracing-appender = "0.2.5"
+
 slab = "0.4.12"
 multi_index_map = "0.15.1"
 
@@ -39,7 +44,7 @@ wayland-protocols = { version = "0.32.9", features = ["server", "staging"] }
 rustix = "1.1.4"
 bitflags = "2.11.0"
 rustc-hash = "2.1.2"
-log = "0.4.33"
+
 
 [build-dependencies]
 clap_complete = "4.5.65"

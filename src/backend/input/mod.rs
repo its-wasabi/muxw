@@ -12,15 +12,11 @@ impl InputManager {
     pub fn new(
         sender: crate::event_loop::EventSender<crate::token::Token>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        println!("INPUT - START");
         let (worker_sender, worker_resources) = worker::InputWorker::new(sender)?;
 
-        println!("INPUT (THREAD)");
         std::thread::Builder::new()
             .name(std::string::String::from("input-worker"))
             .spawn(move || worker::run_input_worker_thread(worker_resources))?;
-
-        println!("INPUT - DONE");
 
         Ok(Self { worker_sender })
     }
