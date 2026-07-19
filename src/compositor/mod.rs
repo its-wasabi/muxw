@@ -25,7 +25,7 @@ impl Compositor {
         let triggered_events = Vec::new();
 
         println!("BRUH");
-        let seat_sender = event_loop.channel_sender();
+        let seat_sender = event_loop.sender();
         let mut seat = libseat::Seat::open(move |_, seat_event| match seat_event {
             libseat::SeatEvent::Enable => seat_sender.send(crate::token::Token::SeatEnable),
             libseat::SeatEvent::Disable => seat_sender.send(crate::token::Token::SeatDisable),
@@ -166,7 +166,7 @@ impl Compositor {
                         if let Some(stream) = self.socket.accept()? {
                             let mut display_handle = self.display.handle();
                             let client_state = client::ClientState {
-                                event_sender: self.event_loop.channel_sender(),
+                                event_sender: self.event_loop.sender(),
                             };
 
                             let client = display_handle

@@ -9,9 +9,9 @@ impl State {
         event_loop: &crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let config_command_sender =
-            crate::config::Config::spawn(&context.path.config_file, event_loop.channel_sender())?;
+            crate::config::Config::spawn(&context.path.config_file, event_loop.sender())?;
 
-        let input_manager = crate::backend::input::InputManager::new(event_loop.channel_sender())?;
+        let input_manager = crate::backend::input::InputManager::new(event_loop.sender())?;
 
         Ok(Self {
             config_command_sender,

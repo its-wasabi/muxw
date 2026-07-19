@@ -30,7 +30,7 @@ impl InputWorker {
         )?;
 
         Ok((
-            event_loop.channel_sender(),
+            event_loop.sender(),
             Self {
                 event_loop,
                 libinput,
