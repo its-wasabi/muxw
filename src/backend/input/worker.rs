@@ -15,19 +15,22 @@ impl InputWorker {
         sender: crate::event_loop::EventSender<crate::token::Token>,
     ) -> Result<(crate::event_loop::EventSender<InputToken>, Self), Box<dyn std::error::Error>>
     {
+        println!("INPUT WORKER - START");
         let mut event_loop = crate::event_loop::EventLoop::new()?;
 
+        println!("INPUT WORKER (libinput instance) - START");
         let mut libinput = input::Libinput::new_with_udev(LibinputInterface {
             sender: sender.clone(),
         });
-        // TODO: Handle error
-        // TODO: make that configurable and automatic
-        libinput.udev_assign_seat("seat0");
+        println!("INPUT WORKER (Assign udev seat \"seat0\")");
+
         event_loop.register_source(
             &libinput.as_fd(),
             polling::PollMode::Edge,
             InputToken::Libinput,
         )?;
+
+        println!("INPUT WORKER (libinput instance) - DONE");
 
         Ok((
             event_loop.sender(),
@@ -66,6 +69,7 @@ impl input::LibinputInterface for LibinputInterface {
         path: &std::path::Path,
         flags: i32,
     ) -> std::result::Result<std::os::fd::OwnedFd, i32> {
+        println!("DEV OPEN: {}", path.display());
         let (reply, response) = crossbeam_channel::bounded(1);
         self.sender
             .send(crate::token::Token::SeatOpenRequest(Box::new(
@@ -88,6 +92,12 @@ impl input::LibinputInterface for LibinputInterface {
 
 #[allow(clippy::needless_pass_by_value)]
 pub fn run_input_worker_thread(mut worker: InputWorker) -> ! {
+    // TODO: Handle error
+    // TODO: make that configurable and automatic
+    // TODO: Think if you should move it back?. Also find out why it was blocking normal compositor
+    // operation
+    worker.libinput.udev_assign_seat("seat0");
+
     let mut triggered = Vec::with_capacity(4);
     drain_libinput_events(&mut worker);
 
