@@ -12,7 +12,7 @@ mod token;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = context::Context::new()?;
-    let _log_guard = context::logging::init_logging(&context.log_target);
+    let _log_guard = context::logging::init_logging(&context.log_target)?;
 
     #[cfg(debug_assertions)]
     println!("{context:#?}");
