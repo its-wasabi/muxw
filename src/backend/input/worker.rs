@@ -16,7 +16,7 @@ impl InputWorker {
     ) -> Result<(crate::event_loop::EventSender<InputToken>, Self), Box<dyn std::error::Error>>
     {
         let mut inner_event_loop = crate::event_loop::EventLoop::new()?;
-        let mut libinput = input::Libinput::new_with_udev(LibinputInterface {
+        let libinput = input::Libinput::new_with_udev(LibinputInterface {
             sender: sender.clone(),
         });
 
@@ -61,7 +61,7 @@ impl input::LibinputInterface for LibinputInterface {
     fn open_restricted(
         &mut self,
         path: &std::path::Path,
-        flags: i32,
+        _flags: i32,
     ) -> std::result::Result<std::os::fd::OwnedFd, i32> {
         let (reply, response) = crossbeam_channel::bounded(1);
 

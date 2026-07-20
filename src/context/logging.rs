@@ -38,14 +38,14 @@ impl LogTarget {
 }
 
 pub struct LoggerGuard {
-    _worker_guard: tracing_appender::non_blocking::WorkerGuard,
-    _dump_data: Option<DumpData>,
+    worker_guard: tracing_appender::non_blocking::WorkerGuard,
+    dump_data: Option<DumpData>,
 }
 impl LoggerGuard {
     const fn new(worker_guard: tracing_appender::non_blocking::WorkerGuard) -> Self {
         Self {
-            _worker_guard: worker_guard,
-            _dump_data: None,
+            worker_guard,
+            dump_data: None,
         }
     }
 
@@ -55,8 +55,8 @@ impl LoggerGuard {
         to_stdout: bool,
     ) -> Self {
         Self {
-            _worker_guard: worker_guard,
-            _dump_data: Some(DumpData::new(path, to_stdout)),
+            worker_guard,
+            dump_data: Some(DumpData::new(path, to_stdout)),
         }
     }
 }
@@ -72,19 +72,21 @@ impl DumpData {
     }
 }
 
-impl Drop for DumpData {
+impl Drop for LoggerGuard {
     fn drop(&mut self) {
-        if let Ok(mut file) = std::fs::File::open(&self.path) {
-            if self.to_stdout {
-                let mut out = std::io::stdout();
-                let _ = std::io::copy(&mut file, &mut out);
-            } else {
-                let mut err = std::io::stderr();
-                let _ = std::io::copy(&mut file, &mut err);
+        if let Some(dump_data) = &self.dump_data {
+            if let Ok(mut file) = std::fs::File::open(&dump_data.path) {
+                if dump_data.to_stdout {
+                    let mut out = std::io::stdout();
+                    let _ = std::io::copy(&mut file, &mut out);
+                } else {
+                    let mut err = std::io::stderr();
+                    let _ = std::io::copy(&mut file, &mut err);
+                }
             }
-        }
 
-        let _ = std::fs::remove_file(&self.path);
+            let _ = std::fs::remove_file(&dump_data.path);
+        }
     }
 }
 

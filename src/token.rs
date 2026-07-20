@@ -23,6 +23,8 @@ pub enum Token {
     Config(crate::config::ConfigRequest),
 
     Shutdown,
+
+    RenderFrame,
 }
 
 #[derive(Debug, Clone)]

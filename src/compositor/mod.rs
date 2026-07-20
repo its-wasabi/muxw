@@ -1,5 +1,7 @@
 use std::os::fd::AsFd;
 
+use wayland_server::backend;
+
 mod client;
 mod state;
 
@@ -12,10 +14,12 @@ pub struct Compositor {
     display: wayland_server::Display<state::State>,
     socket: wayland_server::ListeningSocket,
 
-    // drm_manager: crate::backend::drm::DrmManager,
+    drm_manager: crate::backend::drm::DrmManager,
     renderer: crate::renderer::Renderer,
 
     state: state::State,
+
+    color_phase: f32,
 }
 
 impl Compositor {
@@ -48,15 +52,20 @@ impl Compositor {
             crate::token::Token::WaylandDisplay,
         )?;
 
-        // let drm_manager = crate::backend::drm::DrmManager::new(&mut event_loop)?;
-
         let renderer = crate::renderer::Renderer::new()?;
+
+        let drm_manager = crate::backend::drm::DrmManager::new(&mut event_loop, &renderer)?;
 
         let state = state::State::new(context, &event_loop)?;
 
         event_loop.register_timer(
-            crate::event_loop::TimerMode::Delay(std::time::Duration::from_secs(1)),
+            crate::event_loop::TimerMode::Delay(std::time::Duration::from_secs(20)),
             crate::token::Token::Shutdown,
+        );
+
+        event_loop.register_timer(
+            crate::event_loop::TimerMode::Periodic(std::time::Duration::from_millis(16)),
+            crate::token::Token::RenderFrame,
         );
 
         Ok(Self {
@@ -68,10 +77,12 @@ impl Compositor {
             display,
             socket,
 
-            // drm_manager,
+            drm_manager,
             renderer,
 
             state,
+
+            color_phase: 0.0,
         })
     }
 
@@ -145,12 +156,26 @@ impl Compositor {
                     }
                     crate::token::Token::DrmUdev => {
                         tracing::trace!("DrmUdev monitor event triggered");
+                        self.drm_manager
+                            .dispatch_udev(&mut self.event_loop, &self.renderer);
                     }
                     crate::token::Token::DrmCard(drm_card_key) => {
                         tracing::trace!(?drm_card_key, "DrmCard event triggered");
+                        self.drm_manager.dispatch_card(drm_card_key);
                     }
                     crate::token::Token::Input(event) => {
                         tracing::debug!(?event, "Input event received");
+                        if let crate::backend::input::InputEvent {
+                            kind:
+                                crate::backend::input::InputEventKind::Keyboard {
+                                    keycode: 57,
+                                    state: input::event::keyboard::KeyState::Pressed,
+                                },
+                            ..
+                        } = event
+                        {
+                            self.event_loop.emiter().emit(crate::token::Token::Shutdown);
+                        }
                     }
                     crate::token::Token::Config(command) => {
                         tracing::debug!(?command, "Config command received");
@@ -164,6 +189,18 @@ impl Compositor {
                         }
 
                         return Ok(());
+                    }
+
+                    crate::token::Token::RenderFrame => {
+                        self.color_phase += 0.02;
+
+                        // Calculate smooth RGB values between 0.0 and 1.0
+                        let r = (self.color_phase.sin() * 0.5) + 0.5;
+                        let g = ((self.color_phase + 2.0).sin() * 0.5) + 0.5;
+                        let b = ((self.color_phase + 4.0).sin() * 0.5) + 0.5;
+
+                        // Tell DRM Manager to paint all cards
+                        self.drm_manager.paint_all(&self.renderer, [r, g, b, 1.0]);
                     }
                 }
             }

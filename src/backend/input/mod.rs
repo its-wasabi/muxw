@@ -24,8 +24,8 @@ impl InputManager {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct InputEvent {
-    key: InputDeviceKey,
-    kind: InputEventKind,
+    pub key: InputDeviceKey,
+    pub kind: InputEventKind,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
