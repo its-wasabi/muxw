@@ -10,6 +10,10 @@
 // IMPORTANT: Also error handling here is non-existent if device cant be opened instead of
 // compositor crash it should be simply ignored
 
+// TODO: Try to make DrmCard have Drop trait implemented that will automatically deregister that
+// from event loop.
+
+use drm::control::Device;
 use std::os::fd::AsFd;
 
 const DEVICES_DEFAULT_CAPACITY: usize = 4;
@@ -18,9 +22,19 @@ pub struct DrmManager {
     cards: slab::Slab<DrmCard>,
     monitor: udev::MonitorSocket,
     device_keys: std::collections::HashMap<u64, DrmCardKey>,
+
+    active: bool,
 }
 
 impl DrmManager {
+    pub fn drop_master(&mut self) {
+        for (_, card) in self.cards.iter_mut() {
+            // Drop DRM master so the target TTY/login manager can take over
+            use drm::Device;
+            let _ = card.release_master_lock();
+        }
+    }
+
     pub fn new(
         event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
         renderer: &crate::renderer::Renderer,
@@ -41,6 +55,7 @@ impl DrmManager {
             cards: slab::Slab::with_capacity(DEVICES_DEFAULT_CAPACITY),
             monitor,
             device_keys: std::collections::HashMap::with_capacity(DEVICES_DEFAULT_CAPACITY),
+            active: true,
         };
 
         // Enumerate existing devices
@@ -53,6 +68,65 @@ impl DrmManager {
         }
 
         Ok(drm_manager)
+    }
+
+    pub fn dispatch_udev(
+        &mut self,
+        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
+        renderer: &crate::renderer::Renderer,
+    ) {
+        // Collect events into a vector to free the borrow on `self.monitor`
+        let events: Vec<_> = self.monitor.iter().collect();
+
+        for event in events {
+            let Some(devnum) = event.devnum() else {
+                continue;
+            };
+
+            match event.event_type() {
+                udev::EventType::Add => {
+                    self.process_udev_add(event.device(), event_loop, renderer);
+                }
+                udev::EventType::Change => {
+                    if let Some(&key) = self.device_keys.get(&devnum) {
+                        tracing::info!("Device connector state changed for card {}", key.get());
+                        // TODO: Re-probe connectors via drm::control::connector
+                    }
+                }
+                udev::EventType::Remove => {
+                    if let Some(key) = self.device_keys.remove(&devnum) {
+                        self.deregister_card_inner(key, event_loop);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    pub fn pause(&mut self) {
+        self.active = false;
+        tracing::info!("DRM subsystem paused via TTY switch");
+    }
+
+    pub fn resume(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.active = true;
+        tracing::info!("DRM subsystem resumed, restoring display modesets...");
+
+        for (_, card) in self.cards.iter_mut() {
+            for surface in &card.surfaces {
+                // 2. Force a full modeset to reclaim the screen from the TTY console
+                if let Err(e) = card.set_crtc(
+                    surface.crtc,
+                    Some(surface.fb),
+                    (0, 0),
+                    &[surface.connector],
+                    Some(surface.mode),
+                ) {
+                    tracing::error!("Failed to restore CRTC {:?}: {}", surface.crtc, e);
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Handles an ADD event from either the initial enumerator or udev monitor
@@ -130,40 +204,11 @@ impl DrmManager {
         }
     }
 
-    pub fn dispatch_udev(
-        &mut self,
-        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
-        renderer: &crate::renderer::Renderer,
-    ) {
-        // Collect events into a vector to free the borrow on `self.monitor`
-        let events: Vec<_> = self.monitor.iter().collect();
-
-        for event in events {
-            let Some(devnum) = event.devnum() else {
-                continue;
-            };
-
-            match event.event_type() {
-                udev::EventType::Add => {
-                    self.process_udev_add(event.device(), event_loop, renderer);
-                }
-                udev::EventType::Change => {
-                    if let Some(&key) = self.device_keys.get(&devnum) {
-                        tracing::info!("Device connector state changed for card {}", key.get());
-                        // TODO: Re-probe connectors via drm::control::connector
-                    }
-                }
-                udev::EventType::Remove => {
-                    if let Some(key) = self.device_keys.remove(&devnum) {
-                        self.deregister_card_inner(key, event_loop);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
     pub fn dispatch_card(&mut self, key: DrmCardKey) {
+        if !self.active {
+            return;
+        }
+
         if let Some(card) = self.cards.get(key.get()) {
             use drm::control::Device as _; // Import the trait to use its methods
 
@@ -180,13 +225,15 @@ impl DrmManager {
         }
     }
     pub fn paint_all(&mut self, renderer: &crate::renderer::Renderer, color: [f32; 4]) {
-        // Add this line to verify the loop is alive and generating new colors
-        tracing::trace!("Painting frame with color: {:?}", color);
+        if !self.active {
+            return;
+        }
 
         for (_, card) in self.cards.iter_mut() {
-            if let Some(surface) = &card.surface {
+            // Loop over every active display surface attached to the graphic card
+            for surface in &card.surfaces {
                 if let Err(e) = draw_color(renderer, surface, color) {
-                    tracing::error!("Failed to draw frame: {}", e);
+                    tracing::error!("Failed to draw frame on CRTC {:?}: {}", surface.crtc, e);
                 }
             }
         }
@@ -197,7 +244,8 @@ struct DrmCard {
     file: std::fs::File,
     devnum: u64,
     event_loop_key: Option<crate::event_loop::IoKey>,
-    surface: Option<CardSurface>,
+    // Change from Option<CardSurface> to a Vec to hold multiple monitors
+    surfaces: Vec<CardSurface>,
 }
 
 pub struct CardSurface {
@@ -206,6 +254,9 @@ pub struct CardSurface {
     pub vk_memory: ash::vk::DeviceMemory,
     pub fb: drm::control::framebuffer::Handle, // <-- Add this
     pub crtc: drm::control::crtc::Handle,      // <-- Add this
+
+    pub connector: drm::control::connector::Handle,
+    pub mode: drm::control::Mode,
 }
 
 impl DrmCard {
@@ -219,7 +270,7 @@ impl DrmCard {
             file,
             devnum,
             event_loop_key: None, // Will be set when registered
-            surface: None,
+            surfaces: Vec::new(),
         };
 
         card.set_atomic_universal_planes(true)?;
@@ -284,149 +335,149 @@ pub fn init_surface(
     use drm::control::Device as ControlDevice;
 
     let res_handles = card.resource_handles()?;
+    let crtcs = res_handles.crtcs();
 
-    // 1. Use filter_map with .ok() to silently drop connectors that fail to query
-    let connector = match res_handles
+    // Track which CRTCs we've already assigned to a monitor
+    let mut assigned_crtc_count = 0;
+    let mut active_surfaces = Vec::new();
+
+    // 1. Loop through ALL connectors instead of using .find()
+    let connected_connectors: Vec<_> = res_handles
         .connectors()
         .iter()
         .filter_map(|&conn| card.get_connector(conn, true).ok())
-        .find(|c| c.state() == drm::control::connector::State::Connected)
-    {
-        Some(conn) => conn,
-        None => {
-            tracing::info!(
-                "Skipping card (Devnum {}): No connected monitor",
+        .filter(|c| c.state() == drm::control::connector::State::Connected)
+        .collect();
+
+    if connected_connectors.is_empty() {
+        tracing::info!(
+            "Skipping card (Devnum {}): No connected monitors found",
+            card.devnum
+        );
+        return Ok(());
+    }
+
+    for connector in connected_connectors {
+        let modes = connector.modes();
+        if modes.is_empty() {
+            continue;
+        }
+        let mode = modes[0];
+
+        // 2. Ensure each monitor gets its own unique CRTC pipeline
+        if assigned_crtc_count >= crtcs.len() {
+            tracing::warn!(
+                "More monitors connected than available CRTCs on card {}",
                 card.devnum
             );
-            return Ok(());
+            break;
         }
-    };
+        let crtc = crtcs[assigned_crtc_count];
+        assigned_crtc_count += 1;
 
-    // 2. Safely check for available modes before indexing
-    let modes = connector.modes();
-    if modes.is_empty() {
-        tracing::warn!(
-            "Skipping card (Devnum {}): Monitor connected, but no modes available",
-            card.devnum
-        );
-        return Ok(());
-    }
-    let mode = modes[0];
+        let (width, height) = mode.size();
+        tracing::info!("Setting up Vulkan Surface for monitor {}x{}", width, height);
 
-    // 3. Safely check for available CRTCs before indexing
-    let crtcs = res_handles.crtcs();
-    if crtcs.is_empty() {
-        tracing::warn!(
-            "Skipping card (Devnum {}): No CRTCs available on this device",
-            card.devnum
-        );
-        return Ok(());
-    }
-    let crtc = crtcs[0];
-
-    let (width, height) = mode.size();
-    tracing::info!("Setting up Vulkan Surface for {}x{}", width, height);
-
-    // ... continue with your GBM and Vulkan setup below ...
-
-    // Safer GBM initialization
-    let gbm = gbm::Device::new(&*card).map_err(|e| format!("GBM init failed: {}", e))?;
-    let gbm_bo = gbm
-        .create_buffer_object::<()>(
+        // --- Keep your existing GBM allocations here ---
+        let gbm = gbm::Device::new(&*card).map_err(|e| format!("GBM init failed: {}", e))?;
+        let gbm_bo = gbm.create_buffer_object::<()>(
             width as u32,
             height as u32,
             gbm::Format::Xrgb8888,
             gbm::BufferObjectFlags::SCANOUT
                 | gbm::BufferObjectFlags::RENDERING
                 | gbm::BufferObjectFlags::LINEAR,
-        )
-        .map_err(|e| format!("Failed to create GBM BO: {:?}", e))?;
+        )?;
 
-    use std::os::fd::IntoRawFd; // Add this import at the top of the file
+        use std::os::fd::IntoRawFd;
+        let dma_buf_fd = gbm_bo
+            .fd()
+            .map_err(|e| format!("Failed to export DMA fd: {:?}", e))?;
+        let raw_fd = dma_buf_fd.into_raw_fd();
 
-    let dma_buf_fd = gbm_bo
-        .fd()
-        .map_err(|e| format!("Failed to export DMA fd: {:?}", e))?;
-    let raw_fd = dma_buf_fd.into_raw_fd(); // Consumes the object, keeps the FD open!
+        let raw_handle = unsafe { gbm_bo.handle().u32_ };
+        let non_zero_handle = std::num::NonZeroU32::new(raw_handle).expect("GBM null handle");
 
-    // 1. Extract the raw GEM handle from the GBM C Union
-    let raw_handle = unsafe { gbm_bo.handle().u32_ };
-    let non_zero_handle =
-        std::num::NonZeroU32::new(raw_handle).expect("GBM returned a null buffer handle");
+        let bridge_buffer = GbmToDrm {
+            size: (width as u32, height as u32),
+            pitch: gbm_bo.stride(),
+            handle: drm::buffer::Handle::from(non_zero_handle),
+            format: drm::buffer::DrmFourcc::Xrgb8888,
+        };
 
-    // 2. Wrap it in our custom struct that satisfies DRM 0.15.0
-    let bridge_buffer = GbmToDrm {
-        size: (width as u32, height as u32),
-        pitch: gbm_bo.stride(),
-        handle: drm::buffer::Handle::from(non_zero_handle),
-        format: drm::buffer::DrmFourcc::Xrgb8888,
-    };
+        let fb = card.add_framebuffer(&bridge_buffer, 24, 32)?;
+        card.set_crtc(crtc, Some(fb), (0, 0), &[connector.handle()], Some(mode))?;
 
-    // 3. Hand it to DRM
-    let fb = card.add_framebuffer(&bridge_buffer, 24, 32)?;
-    card.set_crtc(crtc, Some(fb), (0, 0), &[connector.handle()], Some(mode))?;
+        // --- Keep your existing Vulkan image import logic here ---
+        let mut external_memory_info = vk::ExternalMemoryImageCreateInfo::default()
+            .handle_types(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
 
-    let mut external_memory_info = vk::ExternalMemoryImageCreateInfo::default()
-        .handle_types(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
+        let image_create_info = vk::ImageCreateInfo::default()
+            .image_type(vk::ImageType::TYPE_2D)
+            .format(vk::Format::B8G8R8A8_UNORM)
+            .extent(vk::Extent3D {
+                width: width as u32,
+                height: height as u32,
+                depth: 1,
+            })
+            .mip_levels(1)
+            .array_layers(1)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .tiling(vk::ImageTiling::LINEAR)
+            .usage(vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .push_next(&mut external_memory_info);
 
-    let image_create_info = vk::ImageCreateInfo::default()
-        .image_type(vk::ImageType::TYPE_2D)
-        .format(vk::Format::B8G8R8A8_UNORM)
-        .extent(vk::Extent3D {
-            width: width as u32,
-            height: height as u32,
-            depth: 1,
-        })
-        .mip_levels(1)
-        .array_layers(1)
-        .samples(vk::SampleCountFlags::TYPE_1)
-        .tiling(vk::ImageTiling::LINEAR)
-        .usage(vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::COLOR_ATTACHMENT)
-        .push_next(&mut external_memory_info);
+        let vk_image = unsafe { renderer.device.create_image(&image_create_info, None)? };
+        let mem_reqs = unsafe { renderer.device.get_image_memory_requirements(vk_image) };
+        let mem_props = unsafe {
+            renderer
+                .instance
+                .get_physical_device_memory_properties(renderer.physical_device)
+        };
 
-    let vk_image = unsafe { renderer.device.create_image(&image_create_info, None)? };
-    let mem_reqs = unsafe { renderer.device.get_image_memory_requirements(vk_image) };
-    let mem_props = unsafe {
-        renderer
-            .instance
-            .get_physical_device_memory_properties(renderer.physical_device)
-    };
+        let mem_type_index = mem_props
+            .memory_types
+            .iter()
+            .enumerate()
+            .find(|(i, ty)| {
+                (mem_reqs.memory_type_bits & (1 << i)) != 0
+                    && ty
+                        .property_flags
+                        .contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
+            })
+            .map(|(i, _)| i as u32)
+            .expect("Failed to find memory type");
 
-    let mem_type_index = mem_props
-        .memory_types
-        .iter()
-        .enumerate()
-        .find(|(i, ty)| {
-            (mem_reqs.memory_type_bits & (1 << i)) != 0
-                && ty
-                    .property_flags
-                    .contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
-        })
-        .map(|(i, _)| i as u32)
-        .expect("Failed to find suitable memory type");
+        let mut import_info = vk::ImportMemoryFdInfoKHR::default()
+            .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT)
+            .fd(raw_fd);
 
-    let mut import_info = vk::ImportMemoryFdInfoKHR::default()
-        .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT)
-        .fd(raw_fd);
+        let alloc_info = vk::MemoryAllocateInfo::default()
+            .allocation_size(mem_reqs.size)
+            .memory_type_index(mem_type_index)
+            .push_next(&mut import_info);
 
-    let alloc_info = vk::MemoryAllocateInfo::default()
-        .allocation_size(mem_reqs.size)
-        .memory_type_index(mem_type_index)
-        .push_next(&mut import_info);
+        let vk_memory = unsafe { renderer.device.allocate_memory(&alloc_info, None)? };
+        unsafe { renderer.device.bind_image_memory(vk_image, vk_memory, 0)? };
 
-    let vk_memory = unsafe { renderer.device.allocate_memory(&alloc_info, None)? };
-    unsafe { renderer.device.bind_image_memory(vk_image, vk_memory, 0)? };
+        // Push this monitor's configured surface configuration to our list
+        active_surfaces.push(CardSurface {
+            gbm_bo,
+            vk_image,
+            vk_memory,
+            fb,
+            crtc,
 
-    // Store complete state on the card so the timer loop can access it
-    card.surface = Some(CardSurface {
-        gbm_bo,
-        vk_image,
-        vk_memory,
-        fb,
-        crtc,
-    });
+            connector: connector.handle(),
+            mode,
+        });
+    }
 
-    tracing::info!("Vulkan surface initialized and modeset complete!");
+    card.surfaces = active_surfaces;
+    tracing::info!(
+        "Initialized {} display surface(s) on this card!",
+        card.surfaces.len()
+    );
     Ok(())
 }
 

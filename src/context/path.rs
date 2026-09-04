@@ -1,3 +1,5 @@
+// TODO: use dirs crate for path resolution
+
 #[derive(Debug)]
 pub struct Path {
     pub config_dir: std::path::PathBuf,

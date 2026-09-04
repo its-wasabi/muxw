@@ -44,6 +44,8 @@ wayland-protocols = { version = "0.32.9", features = ["server", "staging"] }
 rustix = "1.1.4"
 bitflags = "2.11.0"
 rustc-hash = "2.1.2"
+evdev = "0.13.2"
+cstr = "0.2.12"
 
 
 [build-dependencies]

@@ -1,5 +1,57 @@
 use ash::{ext, khr, vk};
-use std::ffi::CStr;
+
+const API_VERSION: u32 = ash::vk::API_VERSION_1_3;
+
+const APP_NAME: &std::ffi::CStr = crate::helpers::get_app_name_cstr();
+const ENGINE_NAME: &std::ffi::CStr = crate::helpers::get_app_name_cstr();
+
+const VERSION_VK: u32 = ash::vk::make_api_version(
+    0,
+    crate::helpers::get_app_version_major(),
+    crate::helpers::get_app_version_minor(),
+    crate::helpers::get_app_version_patch(),
+);
+const APP_VERSION: u32 = VERSION_VK;
+const ENGINE_VERSION: u32 = VERSION_VK;
+
+#[cfg(debug_assertions)]
+const INSTANCE_LAYERS: &[*const std::ffi::c_char] = &[c"VK_LAYER_KHRONOS_validation"
+    .as_ptr()
+    .cast::<std::ffi::c_char>()];
+#[cfg(not(debug_assertions))]
+const INSTANCE_LAYERS: &[*const std::ffi::c_char] = &[];
+
+// TODO: Write comment explain extensions purpose for each extension
+const INSTANCE_EXTENSIONS: &[*const std::ffi::c_char] = &[
+    ash::khr::external_memory_capabilities::NAME
+        .as_ptr()
+        .cast::<std::ffi::c_char>(),
+    ash::khr::external_semaphore_capabilities::NAME
+        .as_ptr()
+        .cast::<std::ffi::c_char>(),
+    ash::khr::get_physical_device_properties2::NAME
+        .as_ptr()
+        .cast::<std::ffi::c_char>(),
+];
+
+// TODO: Write comment explain extensions purpose for each extension
+const DEVICE_EXTENSIONS: &[*const std::ffi::c_char] = &[
+    ash::ext::image_drm_format_modifier::NAME
+        .as_ptr()
+        .cast::<std::ffi::c_char>(),
+    ash::ext::external_memory_dma_buf::NAME
+        .as_ptr()
+        .cast::<std::ffi::c_char>(),
+    ash::khr::external_memory_fd::NAME
+        .as_ptr()
+        .cast::<std::ffi::c_char>(),
+    ash::khr::external_semaphore_fd::NAME
+        .as_ptr()
+        .cast::<std::ffi::c_char>(),
+    ash::ext::queue_family_foreign::NAME
+        .as_ptr()
+        .cast::<std::ffi::c_char>(),
+];
 
 pub struct Renderer {
     pub entry: ash::Entry,

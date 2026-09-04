@@ -1,9 +1,7 @@
-use std::os::fd::AsFd;
-
-use wayland_server::backend;
-
 mod client;
 mod state;
+
+use std::os::fd::AsFd;
 
 pub struct Compositor {
     event_loop: crate::event_loop::EventLoop<crate::token::Token>,
@@ -14,7 +12,7 @@ pub struct Compositor {
     display: wayland_server::Display<state::State>,
     socket: wayland_server::ListeningSocket,
 
-    drm_manager: crate::backend::drm::DrmManager,
+    // drm_manager: crate::backend::drm::DrmManager,
     renderer: crate::renderer::Renderer,
 
     state: state::State,
@@ -54,19 +52,9 @@ impl Compositor {
 
         let renderer = crate::renderer::Renderer::new()?;
 
-        let drm_manager = crate::backend::drm::DrmManager::new(&mut event_loop, &renderer)?;
+        // let drm_manager = crate::backend::drm::DrmManager::new(&mut event_loop, &renderer)?;
 
         let state = state::State::new(context, &event_loop)?;
-
-        event_loop.register_timer(
-            crate::event_loop::TimerMode::Delay(std::time::Duration::from_secs(20)),
-            crate::token::Token::Shutdown,
-        );
-
-        event_loop.register_timer(
-            crate::event_loop::TimerMode::Periodic(std::time::Duration::from_millis(16)),
-            crate::token::Token::RenderFrame,
-        );
 
         Ok(Self {
             event_loop,
@@ -77,7 +65,7 @@ impl Compositor {
             display,
             socket,
 
-            drm_manager,
+            // drm_manager,
             renderer,
 
             state,
@@ -94,33 +82,37 @@ impl Compositor {
                 let _span_guard = tracing::debug_span!("event", ?token).entered();
 
                 match token {
-                    crate::token::Token::SeatEvent => {
-                        if let Err(error) = self.seat.dispatch() {
-                            tracing::error!(?error, "Failed to dispatch libseat seat");
+                    crate::token::Token::Seat(event) => match event {
+                        crate::backend::seat::SeatEvent::Dispatch => {
+                            if let Err(error) = self.seat.dispatch() {
+                                tracing::error!(?error, "Failed to dispatch libseat seat");
+                            }
                         }
-                    }
 
-                    crate::token::Token::SeatEnable => {
-                        tracing::debug!("Seat Enable");
-                    }
-
-                    crate::token::Token::SeatDisable => {
-                        tracing::debug!("Seat Disable");
-
-                        if let Err(error) = self.seat.disable() {
-                            // FIXME: Handle error like ignore seat disable not working at least
-                            // drop DRM master lock or something if libseat didn't do already
-                            tracing::error!(?error, "Failed to ack Seat Disable");
+                        crate::backend::seat::SeatEvent::Enable => {
+                            // tracing::debug!("Seat Enable");
+                            // if let Err(error) = self.drm_manager.resume() {
+                            //     tracing::error!("Failed to restore DRM state: {error}");
+                            // }
                         }
-                    }
 
-                    crate::token::Token::SeatOpenRequest(open_data) => {
-                        self.seat.open_device(open_data)?;
-                    }
+                        crate::backend::seat::SeatEvent::Disable => {
+                            // tracing::debug!("Seat Disable <- THE IMPORTANT ONE");
+                            // self.drm_manager.pause();
+                            // self.drm_manager.drop_master();
+                            // if let Err(error) = self.seat.disable() {
+                            //     tracing::error!(?error, "Failed to Disable Seat");
+                            // }
+                        }
 
-                    crate::token::Token::SeatCloseRequest(raw_fd) => {
-                        self.seat.close_device(raw_fd)?;
-                    }
+                        crate::backend::seat::SeatEvent::OpenRequest(open_data) => {
+                            self.seat.open_device(open_data)?;
+                        }
+
+                        crate::backend::seat::SeatEvent::CloseRequest(raw_fd) => {
+                            self.seat.close_device(raw_fd)?;
+                        }
+                    },
 
                     crate::token::Token::WaylandSocket => {
                         if let Some(stream) = self.socket.accept()? {
@@ -155,27 +147,53 @@ impl Compositor {
                         tracing::info!(?id, "Wayland client disconnected");
                     }
                     crate::token::Token::DrmUdev => {
-                        tracing::trace!("DrmUdev monitor event triggered");
-                        self.drm_manager
-                            .dispatch_udev(&mut self.event_loop, &self.renderer);
+                        // tracing::trace!("DrmUdev monitor event triggered");
+                        // self.drm_manager
+                        //     .dispatch_udev(&mut self.event_loop, &self.renderer);
                     }
                     crate::token::Token::DrmCard(drm_card_key) => {
-                        tracing::trace!(?drm_card_key, "DrmCard event triggered");
-                        self.drm_manager.dispatch_card(drm_card_key);
+                        // tracing::trace!(?drm_card_key, "DrmCard event triggered");
+                        // self.drm_manager.dispatch_card(drm_card_key);
                     }
                     crate::token::Token::Input(event) => {
+                        let esc = evdev::KeyCode::KEY_ESC.code();
+                        let space = evdev::KeyCode::KEY_SPACE.code();
                         tracing::debug!(?event, "Input event received");
                         if let crate::backend::input::InputEvent {
                             kind:
                                 crate::backend::input::InputEventKind::Keyboard {
-                                    keycode: 57,
+                                    keycode,
                                     state: input::event::keyboard::KeyState::Pressed,
                                 },
                             ..
                         } = event
                         {
-                            self.event_loop.emiter().emit(crate::token::Token::Shutdown);
+                            if keycode == esc as u32 {
+                                self.event_loop.emiter().emit(crate::token::Token::Shutdown);
+                            }
                         }
+
+                        // if let crate::backend::input::InputEvent {
+                        //     kind:
+                        //         crate::backend::input::InputEventKind::Keyboard {
+                        //             keycode,
+                        //             state: input::event::keyboard::KeyState::Pressed,
+                        //         },
+                        //     ..
+                        // } = event
+                        // {
+                        //     if keycode == space as u32 {
+                        //         self.color_phase += 0.1;
+                        //
+                        //         // Calculate smooth RGB values between 0.0 and 1.0
+                        //         let r = (self.color_phase.sin() * 0.5) + 0.5;
+                        //         let g = ((self.color_phase + 2.0).sin() * 0.5) + 0.5;
+                        //         let b = ((self.color_phase + 4.0).sin() * 0.5) + 0.5;
+                        //
+                        //         // Tell DRM Manager to paint all cards
+                        //         self.drm_manager.paint_all(&self.renderer, [r, g, b, 1.0]);
+                        //     }
+                        // }
                     }
                     crate::token::Token::Config(command) => {
                         tracing::debug!(?command, "Config command received");
@@ -189,18 +207,6 @@ impl Compositor {
                         }
 
                         return Ok(());
-                    }
-
-                    crate::token::Token::RenderFrame => {
-                        self.color_phase += 0.02;
-
-                        // Calculate smooth RGB values between 0.0 and 1.0
-                        let r = (self.color_phase.sin() * 0.5) + 0.5;
-                        let g = ((self.color_phase + 2.0).sin() * 0.5) + 0.5;
-                        let b = ((self.color_phase + 4.0).sin() * 0.5) + 0.5;
-
-                        // Tell DRM Manager to paint all cards
-                        self.drm_manager.paint_all(&self.renderer, [r, g, b, 1.0]);
                     }
                 }
             }

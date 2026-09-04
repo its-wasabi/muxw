@@ -2,9 +2,6 @@ mod worker;
 mod xkb_manager;
 
 pub struct InputManager {
-    // TODO: Kept for possibility of future runtime configuration of worker thread
-    // If its truly unnecessary remove it
-    #[allow(unused)]
     worker_sender: crate::event_loop::EventSender<worker::InputToken>,
 }
 

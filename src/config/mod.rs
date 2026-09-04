@@ -32,6 +32,7 @@ impl Config {
             | mlua::StdLib::STRING
             | mlua::StdLib::IO
             | mlua::StdLib::OS;
+
         let lua = mlua::Lua::new_with(libs, mlua::LuaOptions::default())?;
 
         // lua.set_app_data(api::event::EventRegistry::default());
@@ -51,7 +52,7 @@ impl Config {
             })
             .unwrap();
 
-        lua.load(&source).exec().unwrap();
+        // lua.load(&source).exec().unwrap();
         Ok(lua)
     }
 

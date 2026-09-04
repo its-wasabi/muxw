@@ -65,13 +65,14 @@ impl input::LibinputInterface for LibinputInterface {
     ) -> std::result::Result<std::os::fd::OwnedFd, i32> {
         let (reply, response) = crossbeam_channel::bounded(1);
 
-        self.sender
-            .send(crate::token::Token::SeatOpenRequest(Box::new(
-                crate::token::SeatOpenData {
+        self.sender.send(crate::token::Token::Seat(
+            crate::backend::seat::SeatEvent::OpenRequest(Box::new(
+                crate::backend::seat::SeatOpenData {
                     path: path.to_path_buf(),
                     reply,
                 },
-            )));
+            )),
+        ));
 
         match response.recv() {
             Ok(Ok(fd)) => Ok(fd),
@@ -83,8 +84,9 @@ impl input::LibinputInterface for LibinputInterface {
     fn close_restricted(&mut self, fd: std::os::fd::OwnedFd) {
         let raw_fd = fd.as_raw_fd();
         std::mem::drop(fd);
-        self.sender
-            .send(crate::token::Token::SeatCloseRequest(raw_fd));
+        self.sender.send(crate::token::Token::Seat(
+            crate::backend::seat::SeatEvent::CloseRequest(raw_fd),
+        ));
     }
 }
 

@@ -11,14 +11,18 @@ impl SeatManager {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let emitter = event_loop.emiter();
         let mut seat = libseat::Seat::open(move |_, seat_event| match seat_event {
-            libseat::SeatEvent::Enable => emitter.emit(crate::token::Token::SeatEnable),
-            libseat::SeatEvent::Disable => emitter.emit(crate::token::Token::SeatDisable),
+            libseat::SeatEvent::Enable => {
+                emitter.emit(crate::token::Token::Seat(SeatEvent::Enable))
+            }
+            libseat::SeatEvent::Disable => {
+                emitter.emit(crate::token::Token::Seat(SeatEvent::Disable))
+            }
         })?;
 
         event_loop.register_source(
             &seat.get_fd()?,
             polling::PollMode::Edge,
-            crate::token::Token::SeatEvent,
+            crate::token::Token::Seat(SeatEvent::Dispatch),
         )?;
 
         let seat_devices = std::collections::HashMap::with_capacity(DEFAULT_DEVICES_CAPACITY);
@@ -39,10 +43,7 @@ impl SeatManager {
             .map_err(|errno| std::io::Error::from_raw_os_error(errno.into()))
     }
 
-    pub fn open_device(
-        &mut self,
-        open_data: Box<crate::token::SeatOpenData>,
-    ) -> std::io::Result<()> {
+    pub fn open_device(&mut self, open_data: Box<SeatOpenData>) -> std::io::Result<()> {
         let _span_guard = tracing::info_span!("seat device open", path = ?open_data.path).entered();
 
         match self.seat.open_device(&open_data.path) {
@@ -103,5 +104,26 @@ impl SeatManager {
             .map_err(|errno| std::io::Error::from_raw_os_error(errno.into()))?;
 
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SeatEvent {
+    Dispatch,
+    Enable,
+    Disable,
+    OpenRequest(Box<SeatOpenData>),
+    CloseRequest(std::os::fd::RawFd),
+}
+
+#[derive(Debug, Clone)]
+pub struct SeatOpenData {
+    pub path: std::path::PathBuf,
+    pub reply: crossbeam_channel::Sender<Result<std::os::fd::OwnedFd, std::io::Error>>,
+}
+
+impl PartialEq for SeatOpenData {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
     }
 }

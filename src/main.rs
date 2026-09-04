@@ -1,5 +1,3 @@
-const VERSION: (u32, u32, u32) = helpers::parse_version(env!("CARGO_PKG_VERSION"));
-
 mod backend;
 mod compositor;
 mod config;

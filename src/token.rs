@@ -1,40 +1,21 @@
-// TODO: Think about using references if Token needs to reference bigger blob of data e.g.: if you
-// introduce Token::Notify variant it would probably carry notify data which eventually will be
-// String you could potentially pass ownership of that string and string itself is mainly size of
-// the pointer but its already making it not optimal for events that carry only its variant in the
-// Token... Think about it (hell or low performance) (making data indirect two times) Token ->
-// NotifyData(String) -> String in heap is also not good
+// TODO: Think about balancing enum size like move bigger types to the Box<T>,
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
-    SeatEvent,
-    SeatEnable,
-    SeatDisable,
-    SeatOpenRequest(Box<SeatOpenData>),
-    SeatCloseRequest(std::os::fd::RawFd),
+    Seat(crate::backend::seat::SeatEvent),
+
+    // Libinput,
+    Input(crate::backend::input::InputEvent),
 
     WaylandSocket,
     WaylandDisplay,
     WaylandClientDisconnected(wayland_server::backend::ClientId),
 
+    // TODO: Think if it shouldn't be some DrmEvent enum that can be either card or udev
     DrmUdev,
     DrmCard(crate::backend::drm::DrmCardKey),
 
-    Input(crate::backend::input::InputEvent),
     Config(crate::config::ConfigRequest),
 
     Shutdown,
-
-    RenderFrame,
-}
-
-#[derive(Debug, Clone)]
-pub struct SeatOpenData {
-    pub path: std::path::PathBuf,
-    pub reply: crossbeam_channel::Sender<Result<std::os::fd::OwnedFd, std::io::Error>>,
-}
-
-impl PartialEq for SeatOpenData {
-    fn eq(&self, other: &Self) -> bool {
-        self.path == other.path
-    }
 }
