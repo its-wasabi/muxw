@@ -2,11 +2,9 @@ use std::os::fd::{AsFd, AsRawFd};
 
 use input::event::{EventTrait, keyboard::KeyboardEventTrait, pointer::PointerScrollEvent};
 
-mod worker;
 mod xkb_manager;
 
 pub struct InputManager {
-    seat: String,
     libinput: input::Libinput,
     devices: slab::Slab<input::Device>,
     device_keys: std::collections::HashMap<input::Device, InputDeviceKey>,
@@ -15,9 +13,13 @@ pub struct InputManager {
 
 impl InputManager {
     pub fn new(
-        event_loop: &crate::event_loop::EventLoop<crate::token::Token>,
+        event_loop: &mut crate::event_loop::EventLoop,
+        seat_handle: crate::backend::seat::SeatHandle,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let libinput = input::Libinput::new_with_udev(LibinputInterface { sender: todo!() });
+        let mut libinput = input::Libinput::new_with_udev(LibinputInterface { seat_handle });
+        libinput.udev_assign_seat("seat0").map_err(|()| {
+            Box::<dyn std::error::Error>::from("Failed to assign udev seat: seat0")
+        })?;
 
         event_loop.register_source(
             &libinput.as_fd(),
@@ -26,7 +28,6 @@ impl InputManager {
         )?;
 
         Ok(Self {
-            seat: String::from("seat0"),
             libinput,
             devices: slab::Slab::with_capacity(1),
             device_keys: std::collections::HashMap::with_capacity(1),
@@ -145,7 +146,7 @@ impl InputManager {
 }
 
 pub struct LibinputInterface {
-    sender: crate::event_loop::EventSender<crate::token::Token>,
+    seat_handle: crate::backend::seat::SeatHandle,
 }
 
 impl input::LibinputInterface for LibinputInterface {
@@ -154,30 +155,21 @@ impl input::LibinputInterface for LibinputInterface {
         path: &std::path::Path,
         _flags: i32,
     ) -> std::result::Result<std::os::fd::OwnedFd, i32> {
-        let (reply, response) = crossbeam_channel::bounded(1);
-
-        self.sender.send(crate::token::Token::Seat(
-            crate::backend::seat::SeatEvent::OpenRequest(Box::new(
-                crate::backend::seat::SeatOpenData {
-                    path: path.to_path_buf(),
-                    reply,
-                },
-            )),
-        ));
-
-        match response.recv() {
-            Ok(Ok(fd)) => Ok(fd),
-            Ok(Err(io_error)) => Err(io_error.raw_os_error().unwrap_or(13)),
-            Err(_) => Err(13),
-        }
+        tracing::info!("OPEN DEVICE");
+        self.seat_handle.open_device(path).map_err(|error| {
+            error.raw_os_error().unwrap_or_else(|| {
+                tracing::warn!(
+                    ?error,
+                    "seat open_device error had no OS errno; reporting EIO"
+                );
+                rustix::io::Errno::IO.raw_os_error()
+            })
+        })
     }
 
     fn close_restricted(&mut self, fd: std::os::fd::OwnedFd) {
-        let raw_fd = fd.as_raw_fd();
+        let _ = self.seat_handle.close_device(fd.as_raw_fd());
         std::mem::drop(fd);
-        self.sender.send(crate::token::Token::Seat(
-            crate::backend::seat::SeatEvent::CloseRequest(raw_fd),
-        ));
     }
 }
 

@@ -4,20 +4,19 @@ mod state;
 use std::os::fd::AsFd;
 
 pub struct Compositor {
-    event_loop: crate::event_loop::EventLoop<crate::token::Token>,
+    event_loop: crate::event_loop::EventLoop,
     triggered_events: Vec<crate::token::Token>,
 
-    seat: crate::backend::seat::SeatManager,
+    seat_manager: crate::backend::seat::SeatManager,
+    input_manager: crate::backend::input::InputManager,
+    drm_manager: crate::backend::drm::DrmManager,
 
     display: wayland_server::Display<state::State>,
     socket: wayland_server::ListeningSocket,
 
-    // drm_manager: crate::backend::drm::DrmManager,
-    renderer: crate::renderer::Renderer,
-
     state: state::State,
 
-    color_phase: f32,
+    renderer: crate::renderer::Renderer,
 }
 
 impl Compositor {
@@ -25,7 +24,9 @@ impl Compositor {
         let mut event_loop = crate::event_loop::EventLoop::new()?;
         let triggered_events = Vec::new();
 
-        let seat = crate::backend::seat::SeatManager::new(&mut event_loop)?;
+        let seat_manager = crate::backend::seat::SeatManager::new(&mut event_loop)?;
+        let input_manager =
+            crate::backend::input::InputManager::new(&mut event_loop, seat_manager.handle())?;
 
         let mut display = wayland_server::Display::new()?;
         let display_handle = display.handle();
@@ -52,25 +53,24 @@ impl Compositor {
 
         let renderer = crate::renderer::Renderer::new()?;
 
-        // let drm_manager = crate::backend::drm::DrmManager::new(&mut event_loop, &renderer)?;
+        let drm_manager = crate::backend::drm::DrmManager::new(&mut event_loop, &renderer)?;
 
-        let state = state::State::new(context, &event_loop)?;
+        let state = state::State::new(context, &mut event_loop)?;
 
         Ok(Self {
             event_loop,
             triggered_events,
 
-            seat,
+            seat_manager,
+            input_manager,
 
             display,
             socket,
 
-            // drm_manager,
+            drm_manager,
             renderer,
 
             state,
-
-            color_phase: 0.0,
         })
     }
 
@@ -84,38 +84,30 @@ impl Compositor {
                 match token {
                     crate::token::Token::Seat(event) => match event {
                         crate::backend::seat::SeatEvent::Dispatch => {
-                            if let Err(error) = self.seat.dispatch() {
+                            if let Err(error) = self.seat_manager.dispatch() {
                                 tracing::error!(?error, "Failed to dispatch libseat seat");
                             }
                         }
 
                         crate::backend::seat::SeatEvent::Enable => {
-                            // tracing::debug!("Seat Enable");
-                            // if let Err(error) = self.drm_manager.resume() {
-                            //     tracing::error!("Failed to restore DRM state: {error}");
-                            // }
+                            tracing::debug!("Seat Enable");
+                            if let Err(error) = self.drm_manager.resume() {
+                                tracing::error!("Failed to restore DRM state: {error}");
+                            }
                         }
 
                         crate::backend::seat::SeatEvent::Disable => {
-                            // tracing::debug!("Seat Disable <- THE IMPORTANT ONE");
-                            // self.drm_manager.pause();
-                            // self.drm_manager.drop_master();
-                            // if let Err(error) = self.seat.disable() {
-                            //     tracing::error!(?error, "Failed to Disable Seat");
-                            // }
-                        }
-
-                        crate::backend::seat::SeatEvent::OpenRequest(open_data) => {
-                            self.seat.open_device(open_data)?;
-                        }
-
-                        crate::backend::seat::SeatEvent::CloseRequest(raw_fd) => {
-                            self.seat.close_device(raw_fd)?;
+                            tracing::debug!("Seat Disable <- THE IMPORTANT ONE");
+                            self.drm_manager.pause();
+                            self.drm_manager.drop_master();
+                            if let Err(error) = self.seat_manager.disable() {
+                                tracing::error!(?error, "Failed to Disable Seat");
+                            }
                         }
                     },
 
                     crate::token::Token::Libinput => {
-                        self.state.input_manager.dispatch();
+                        self.input_manager.dispatch()?;
                     }
 
                     crate::token::Token::WaylandSocket => {
@@ -151,17 +143,21 @@ impl Compositor {
                         tracing::info!(?id, "Wayland client disconnected");
                     }
                     crate::token::Token::DrmUdev => {
-                        // tracing::trace!("DrmUdev monitor event triggered");
-                        // self.drm_manager
-                        //     .dispatch_udev(&mut self.event_loop, &self.renderer);
+                        tracing::trace!("DrmUdev monitor event triggered");
+                        self.drm_manager
+                            .dispatch_udev(&mut self.event_loop, &self.renderer);
                     }
                     crate::token::Token::DrmCard(drm_card_key) => {
-                        // tracing::trace!(?drm_card_key, "DrmCard event triggered");
-                        // self.drm_manager.dispatch_card(drm_card_key);
+                        tracing::trace!(?drm_card_key, "DrmCard event triggered");
+                        self.drm_manager.dispatch_card(
+                            drm_card_key,
+                            &self.renderer,
+                            [0.0, 0.0, 0.0, 1.0],
+                        );
                     }
                     crate::token::Token::Input(event) => {
                         let esc = evdev::KeyCode::KEY_ESC.code();
-                        let space = evdev::KeyCode::KEY_SPACE.code();
+                        let _space = evdev::KeyCode::KEY_SPACE.code();
                         tracing::debug!(?event, "Input event received");
                         if let crate::backend::input::InputEvent {
                             kind:
@@ -177,27 +173,11 @@ impl Compositor {
                             }
                         }
 
-                        // if let crate::backend::input::InputEvent {
-                        //     kind:
-                        //         crate::backend::input::InputEventKind::Keyboard {
-                        //             keycode,
-                        //             state: input::event::keyboard::KeyState::Pressed,
-                        //         },
-                        //     ..
-                        // } = event
-                        // {
-                        //     if keycode == space as u32 {
-                        //         self.color_phase += 0.1;
-                        //
-                        //         // Calculate smooth RGB values between 0.0 and 1.0
-                        //         let r = (self.color_phase.sin() * 0.5) + 0.5;
-                        //         let g = ((self.color_phase + 2.0).sin() * 0.5) + 0.5;
-                        //         let b = ((self.color_phase + 4.0).sin() * 0.5) + 0.5;
-                        //
-                        //         // Tell DRM Manager to paint all cards
-                        //         self.drm_manager.paint_all(&self.renderer, [r, g, b, 1.0]);
-                        //     }
-                        // }
+                        let r: f32 = rand::random_range(0.0..=1.0);
+                        let g: f32 = rand::random_range(0.0..=1.0);
+                        let b: f32 = rand::random_range(0.0..=1.0);
+
+                        self.drm_manager.paint_all(&self.renderer, [r, g, b, 1.0]);
                     }
                     crate::token::Token::Config(command) => {
                         tracing::debug!(?command, "Config command received");
@@ -206,7 +186,7 @@ impl Compositor {
                     crate::token::Token::Shutdown => {
                         tracing::debug!("Exiting");
 
-                        if let Err(error) = self.seat.disable() {
+                        if let Err(error) = self.seat_manager.disable() {
                             tracing::error!(?error, "Failed to ack Seat Disable during Shutdown");
                         }
 

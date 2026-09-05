@@ -41,7 +41,7 @@ enum EntryKind {
     Dead,
 }
 
-pub struct EventLoop<T: Clone> {
+pub struct EventLoop<T: Clone = crate::token::Token> {
     poller: std::sync::Arc<polling::Poller>,
 
     emits: std::rc::Rc<std::cell::RefCell<std::collections::VecDeque<T>>>,

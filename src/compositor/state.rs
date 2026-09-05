@@ -1,22 +1,11 @@
-pub struct State {
-    pub config_command_sender: crossbeam_channel::Sender<crate::config::ConfigCommand>,
-    pub input_manager: crate::backend::input::InputManager,
-}
+pub struct State {}
 
 impl State {
-    pub(super) fn new(
+    pub fn new(
         context: &crate::context::Context,
-        event_loop: &crate::event_loop::EventLoop<crate::token::Token>,
+        event_loop: &mut crate::event_loop::EventLoop,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let config_command_sender =
-            crate::config::Config::spawn(&context.path.config_file, event_loop.sender())?;
-
-        let input_manager = crate::backend::input::InputManager::new(&event_loop)?;
-
-        Ok(Self {
-            config_command_sender,
-            input_manager,
-        })
+        Ok(Self {})
     }
 }
 
