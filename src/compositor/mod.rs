@@ -114,6 +114,10 @@ impl Compositor {
                         }
                     },
 
+                    crate::token::Token::Libinput => {
+                        self.state.input_manager.dispatch();
+                    }
+
                     crate::token::Token::WaylandSocket => {
                         if let Some(stream) = self.socket.accept()? {
                             let mut display_handle = self.display.handle();

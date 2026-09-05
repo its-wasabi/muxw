@@ -4,7 +4,7 @@
 pub enum Token {
     Seat(crate::backend::seat::SeatEvent),
 
-    // Libinput,
+    Libinput,
     Input(crate::backend::input::InputEvent),
 
     WaylandSocket,

@@ -11,7 +11,7 @@ impl State {
         let config_command_sender =
             crate::config::Config::spawn(&context.path.config_file, event_loop.sender())?;
 
-        let input_manager = crate::backend::input::InputManager::new(event_loop.sender())?;
+        let input_manager = crate::backend::input::InputManager::new(&event_loop)?;
 
         Ok(Self {
             config_command_sender,
