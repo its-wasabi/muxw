@@ -1,4 +1,4 @@
-// pub mod api;
+const ENABLED_LUA_LIBRARIES: mlua::StdLib = mlua::StdLib::ALL_SAFE;
 
 pub struct Config {}
 
@@ -27,13 +27,7 @@ impl Config {
     }
 
     fn init_lua(path: &std::path::Path) -> mlua::Result<mlua::Lua> {
-        let libs = mlua::StdLib::TABLE
-            | mlua::StdLib::MATH
-            | mlua::StdLib::STRING
-            | mlua::StdLib::IO
-            | mlua::StdLib::OS;
-
-        let lua = mlua::Lua::new_with(libs, mlua::LuaOptions::default())?;
+        let lua = mlua::Lua::new_with(ENABLED_LUA_LIBRARIES, mlua::LuaOptions::default())?;
 
         // lua.set_app_data(api::event::EventRegistry::default());
         // let mux_table = api::create_global_table(&lua).unwrap();

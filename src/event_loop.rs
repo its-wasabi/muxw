@@ -20,17 +20,12 @@ impl<T> TokenEntry<T> {
     }
 
     const fn is_oneshot(&self) -> bool {
-        match self.kind {
-            EntryKind::Io(poll_mode) => matches!(
-                poll_mode,
-                polling::PollMode::Oneshot | polling::PollMode::EdgeOneshot
-            ),
-            EntryKind::Timer(timer_mode) => {
-                matches!(timer_mode, TimerMode::Delay(_) | TimerMode::Periodic(_))
-            }
-
-            EntryKind::Dead => true,
-        }
+        matches!(
+            self.kind,
+            EntryKind::Dead
+                | EntryKind::Timer(TimerMode::Delay(_) | TimerMode::Exact(_))
+                | EntryKind::Io(polling::PollMode::Oneshot | polling::PollMode::EdgeOneshot)
+        )
     }
 }
 
@@ -143,6 +138,7 @@ impl<T: Clone> EventLoop<T> {
 pub struct IoKey(usize);
 
 impl IoKey {
+    #[inline]
     pub const fn get(self) -> usize {
         self.0
     }
@@ -184,6 +180,7 @@ impl<T: Clone> EventLoop<T> {
 pub struct TimerKey(usize);
 
 impl TimerKey {
+    #[inline]
     pub const fn get(self) -> usize {
         self.0
     }

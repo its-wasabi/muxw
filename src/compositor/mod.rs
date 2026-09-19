@@ -9,8 +9,7 @@ pub struct Compositor {
 
     seat_manager: crate::backend::seat::SeatManager,
     input_manager: crate::backend::input::InputManager,
-    drm_manager: crate::backend::drm::DrmManager,
-
+    // drm_manager: crate::backend::drm::DrmManager,
     display: wayland_server::Display<state::State>,
     socket: wayland_server::ListeningSocket,
 
@@ -53,7 +52,7 @@ impl Compositor {
 
         let renderer = crate::renderer::Renderer::new()?;
 
-        let drm_manager = crate::backend::drm::DrmManager::new(&mut event_loop, &renderer)?;
+        // let drm_manager = crate::backend::drm::DrmManager::new(&mut event_loop, &renderer)?;
 
         let state = state::State::new(context, &mut event_loop)?;
 
@@ -67,7 +66,7 @@ impl Compositor {
             display,
             socket,
 
-            drm_manager,
+            // drm_manager,
             renderer,
 
             state,
@@ -91,18 +90,18 @@ impl Compositor {
 
                         crate::backend::seat::SeatEvent::Enable => {
                             tracing::debug!("Seat Enable");
-                            if let Err(error) = self.drm_manager.resume() {
-                                tracing::error!("Failed to restore DRM state: {error}");
-                            }
+                            // if let Err(error) = self.drm_manager.resume() {
+                            //     tracing::error!("Failed to restore DRM state: {error}");
+                            // }
                         }
 
                         crate::backend::seat::SeatEvent::Disable => {
                             tracing::debug!("Seat Disable <- THE IMPORTANT ONE");
-                            self.drm_manager.pause();
-                            self.drm_manager.drop_master();
-                            if let Err(error) = self.seat_manager.disable() {
-                                tracing::error!(?error, "Failed to Disable Seat");
-                            }
+                            // self.drm_manager.pause();
+                            // self.drm_manager.drop_master();
+                            // if let Err(error) = self.seat_manager.disable() {
+                            //     tracing::error!(?error, "Failed to Disable Seat");
+                            // }
                         }
                     },
 
@@ -144,17 +143,17 @@ impl Compositor {
                     }
                     crate::token::Token::DrmUdev => {
                         tracing::trace!("DrmUdev monitor event triggered");
-                        self.drm_manager
-                            .dispatch_udev(&mut self.event_loop, &self.renderer);
+                        // self.drm_manager
+                        //     .dispatch_udev(&mut self.event_loop, &self.renderer);
                     }
-                    crate::token::Token::DrmCard(drm_card_key) => {
-                        tracing::trace!(?drm_card_key, "DrmCard event triggered");
-                        self.drm_manager.dispatch_card(
-                            drm_card_key,
-                            &self.renderer,
-                            [0.0, 0.0, 0.0, 1.0],
-                        );
-                    }
+                    // crate::token::Token::DrmCard(drm_card_key) => {
+                    //     tracing::trace!(?drm_card_key, "DrmCard event triggered");
+                    //     // self.drm_manager.dispatch_card(
+                    //     //     drm_card_key,
+                    //     //     &self.renderer,
+                    //     //     [0.0, 0.0, 0.0, 1.0],
+                    //     // );
+                    // }
                     crate::token::Token::Input(event) => {
                         let esc = evdev::KeyCode::KEY_ESC.code();
                         let _space = evdev::KeyCode::KEY_SPACE.code();
@@ -173,11 +172,7 @@ impl Compositor {
                             }
                         }
 
-                        let r: f32 = rand::random_range(0.0..=1.0);
-                        let g: f32 = rand::random_range(0.0..=1.0);
-                        let b: f32 = rand::random_range(0.0..=1.0);
-
-                        self.drm_manager.paint_all(&self.renderer, [r, g, b, 1.0]);
+                        // self.drm_manager.paint_all(&self.renderer, [r, g, b, 1.0]);
                     }
                     crate::token::Token::Config(command) => {
                         tracing::debug!(?command, "Config command received");

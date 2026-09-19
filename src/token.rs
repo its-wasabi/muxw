@@ -13,8 +13,7 @@ pub enum Token {
 
     // TODO: Think if it shouldn't be some DrmEvent enum that can be either card or udev
     DrmUdev,
-    DrmCard(crate::backend::drm::DrmCardKey),
-
+    // DrmCard(crate::backend::drm::DrmCardKey),
     Config(crate::config::ConfigRequest),
 
     Shutdown,

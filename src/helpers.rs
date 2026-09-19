@@ -3,28 +3,23 @@ pub const fn get_app_name() -> &'static str {
 }
 
 pub const fn get_app_name_cstr() -> &'static std::ffi::CStr {
-    let cargo_pkg_name = env!("CARGO_PKG_NAME");
-    cstr::cstr!(cargo_pkg_name)
+    let bytes = concat!(env!("CARGO_PKG_NAME"), "\0").as_bytes();
+    unsafe { std::ffi::CStr::from_bytes_with_nul_unchecked(bytes) }
 }
 
-pub const fn get_app_version_major() -> u32 {
-    parse_u32(env!("CARGO_PKG_VERSION_MAJOR"))
+#[derive(Debug, Clone, Copy)]
+pub struct Version {
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
 }
 
-pub const fn get_app_version_minor() -> u32 {
-    parse_u32(env!("CARGO_PKG_VERSION_MINOR"))
-}
-
-pub const fn get_app_version_patch() -> u32 {
-    parse_u32(env!("CARGO_PKG_VERSION_PATCH"))
-}
-
-pub const fn get_app_version() -> (u32, u32, u32) {
-    (
-        get_app_version_major(),
-        get_app_version_minor(),
-        get_app_version_patch(),
-    )
+pub const fn get_app_version() -> Version {
+    Version {
+        major: parse_u32(env!("CARGO_PKG_VERSION_MAJOR")),
+        minor: parse_u32(env!("CARGO_PKG_VERSION_MINOR")),
+        patch: parse_u32(env!("CARGO_PKG_VERSION_PATCH")),
+    }
 }
 
 const fn parse_u32(s: &str) -> u32 {
@@ -37,13 +32,3 @@ const fn parse_u32(s: &str) -> u32 {
     }
     result
 }
-
-pub const DEFAULT_CONFIG: &str = /* lua */
-    r#"
-print("INSIDE LUA")
-Mux.bind("W", Mux.motion.focus.up);
-Mux.bind("S", Mux.motion.focus.down);
-Mux.bind("D", Mux.motion.focus.right);
-Mux.bind("A", Mux.motion.focus.left);
-print("LUA DONE")
-"#;
