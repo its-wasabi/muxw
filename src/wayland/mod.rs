@@ -33,7 +33,7 @@ impl WaylandServer {
             Event::Display,
         )?;
 
-        let state = state::State::new(event_loop)?;
+        let state = state::State::new(event_loop);
 
         Ok(Self {
             display,

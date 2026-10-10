@@ -1,10 +1,8 @@
 pub struct State {}
 
 impl State {
-    pub fn new(
-        _event_loop: &mut crate::event_loop::EventLoop,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        Ok(Self {})
+    pub fn new(_event_loop: &mut crate::event_loop::EventLoop) -> Self {
+        Self {}
     }
 }
 

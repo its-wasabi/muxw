@@ -1,4 +1,5 @@
-// TODO: Think about balancing enum size like move bigger types to the Box<T>,
+// NOTE: Used to notify if Token grows too big
+const _: () = assert!(std::mem::size_of::<Token>() <= 48);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
