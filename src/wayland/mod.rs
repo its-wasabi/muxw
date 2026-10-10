@@ -7,7 +7,6 @@ pub struct WaylandServer {
     display: wayland_server::Display<state::State>,
     socket: wayland_server::ListeningSocket,
     state: state::State,
-    event_emitter: crate::event_loop::EventEmitter<crate::token::Token>,
 }
 
 impl WaylandServer {
@@ -36,20 +35,17 @@ impl WaylandServer {
 
         let state = state::State::new(event_loop)?;
 
-        let event_emitter = event_loop.emiter();
-
         Ok(Self {
             display,
             socket,
             state,
-            event_emitter,
         })
     }
 
     pub fn dispatch(
         &mut self,
         event: Event,
-        event_loop: &mut crate::event_loop::EventLoop,
+        event_loop: &crate::event_loop::EventLoop,
     ) -> Result<(), Box<dyn std::error::Error>> {
         match event {
             Event::Socket => self.handle_socket(event_loop),
@@ -62,12 +58,12 @@ impl WaylandServer {
     }
 
     fn handle_socket(
-        &mut self,
-        event_loop: &mut crate::event_loop::EventLoop,
+        &self,
+        event_loop: &crate::event_loop::EventLoop,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(stream) = self.socket.accept()? {
             let mut display_handle = self.display.handle();
-            let client_state = client::ClientState {
+            let client_state = client::Client {
                 event_sender: event_loop.sender(),
             };
 
@@ -97,7 +93,7 @@ impl WaylandServer {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     Socket,
     Display,

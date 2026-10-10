@@ -1,8 +1,8 @@
-pub struct ClientState {
+pub struct Client {
     pub event_sender: crate::event_loop::EventSender<crate::token::Token>,
 }
 
-impl wayland_server::backend::ClientData for ClientState {
+impl wayland_server::backend::ClientData for Client {
     fn initialized(&self, _client_id: wayland_server::backend::ClientId) {
         println!("Initialized");
     }
