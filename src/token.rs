@@ -3,18 +3,35 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Seat(crate::backend::seat::SeatEvent),
-
-    Libinput,
     Input(crate::backend::input::InputEvent),
+    Drm(crate::backend::drm::Event),
+    Wayland(crate::wayland::Event),
 
-    WaylandSocket,
-    WaylandDisplay,
-    WaylandClientDisconnected(wayland_server::backend::ClientId),
-
-    // TODO: Think if it shouldn't be some DrmEvent enum that can be either card or udev
-    DrmUdev,
-    // DrmCard(crate::backend::drm::DrmCardKey),
     Config(crate::config::ConfigRequest),
 
-    Shutdown,
+    Exit,
+}
+
+impl From<crate::backend::seat::SeatEvent> for Token {
+    fn from(value: crate::backend::seat::SeatEvent) -> Self {
+        Self::Seat(value)
+    }
+}
+
+impl From<crate::backend::input::InputEvent> for Token {
+    fn from(value: crate::backend::input::InputEvent) -> Self {
+        Self::Input(value)
+    }
+}
+
+impl From<crate::backend::drm::Event> for Token {
+    fn from(value: crate::backend::drm::Event) -> Self {
+        Self::Drm(value)
+    }
+}
+
+impl From<crate::wayland::Event> for Token {
+    fn from(value: crate::wayland::Event) -> Self {
+        Self::Wayland(value)
+    }
 }

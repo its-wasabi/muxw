@@ -7,7 +7,7 @@ mod xkb_manager;
 pub struct InputManager {
     libinput: input::Libinput,
     devices: slab::Slab<input::Device>,
-    device_keys: std::collections::HashMap<input::Device, InputDeviceKey>,
+    device_keys: std::collections::HashMap<input::Device, DeviceKey>,
     emitter: crate::event_loop::EventEmitter<crate::token::Token>,
 }
 
@@ -24,7 +24,7 @@ impl InputManager {
         event_loop.register_source(
             &libinput.as_fd(),
             polling::PollMode::Edge,
-            crate::token::Token::Libinput,
+            InputEvent::Dispatch,
         )?;
 
         Ok(Self {
@@ -41,48 +41,48 @@ impl InputManager {
             match event {
                 input::Event::Device(input::event::DeviceEvent::Added(device_add_event)) => {
                     let device = device_add_event.device();
-                    let key = InputDeviceKey(self.devices.insert(device.clone()));
+                    let key = DeviceKey(self.devices.insert(device.clone()));
                     self.device_keys.insert(device, key);
-                    self.emitter.emit(crate::token::Token::Input(InputEvent {
+                    self.emitter.emit(InputEvent::Device {
                         key,
-                        kind: InputEventKind::DeviceAdded,
-                    }));
+                        kind: EventKind::DeviceAdded,
+                    });
                 }
 
                 input::Event::Device(input::event::DeviceEvent::Removed(device_remove_event)) => {
                     let device = device_remove_event.device();
                     if let Some(key) = self.device_keys.remove(&device) {
                         self.devices.remove(key.get());
-                        self.emitter.emit(crate::token::Token::Input(InputEvent {
+                        self.emitter.emit(InputEvent::Device {
                             key,
-                            kind: InputEventKind::DeviceRemoved,
-                        }));
+                            kind: EventKind::DeviceRemoved,
+                        });
                     }
                 }
 
                 input::Event::Keyboard(keyboard_event) => {
                     let device = keyboard_event.device();
                     if let Some(key) = self.device_keys.get(&device) {
-                        self.emitter.emit(crate::token::Token::Input(InputEvent {
+                        self.emitter.emit(InputEvent::Device {
                             key: *key,
-                            kind: InputEventKind::Keyboard {
+                            kind: EventKind::Keyboard {
                                 keycode: keyboard_event.key(),
                                 state: keyboard_event.key_state(),
                             },
-                        }));
+                        });
                     }
                 }
 
                 input::Event::Pointer(input::event::PointerEvent::Button(pointer_button_event)) => {
                     let device = pointer_button_event.device();
                     if let Some(key) = self.device_keys.get(&device) {
-                        self.emitter.emit(crate::token::Token::Input(InputEvent {
+                        self.emitter.emit(InputEvent::Device {
                             key: *key,
-                            kind: InputEventKind::PointerButton {
+                            kind: EventKind::PointerButton {
                                 keycode: pointer_button_event.button(),
                                 state: pointer_button_event.button_state(),
                             },
-                        }));
+                        });
                     }
                 }
 
@@ -98,12 +98,10 @@ impl InputManager {
                                 .scroll_value(input::event::pointer::Axis::Vertical);
 
                             if vertical != 0.0 {
-                                self.emitter.emit(crate::token::Token::Input(InputEvent {
+                                self.emitter.emit(InputEvent::Device {
                                     key: *key,
-                                    kind: InputEventKind::PointerVerticalScroll {
-                                        scroll: vertical,
-                                    },
-                                }));
+                                    kind: EventKind::PointerVerticalScroll { scroll: vertical },
+                                });
                             }
                         }
 
@@ -114,12 +112,10 @@ impl InputManager {
                                 .scroll_value(input::event::pointer::Axis::Horizontal);
 
                             if horizontal != 0.0 {
-                                self.emitter.emit(crate::token::Token::Input(InputEvent {
+                                self.emitter.emit(InputEvent::Device {
                                     key: *key,
-                                    kind: InputEventKind::PointerHorizontalScroll {
-                                        scroll: horizontal,
-                                    },
-                                }));
+                                    kind: EventKind::PointerHorizontalScroll { scroll: horizontal },
+                                });
                             }
                         }
                     }
@@ -128,13 +124,13 @@ impl InputManager {
                 input::Event::Pointer(input::event::PointerEvent::Motion(motion)) => {
                     let device = motion.device();
                     if let Some(key) = self.device_keys.get(&device) {
-                        self.emitter.emit(crate::token::Token::Input(InputEvent {
+                        self.emitter.emit(InputEvent::Device {
                             key: *key,
-                            kind: InputEventKind::Motion {
+                            kind: EventKind::Motion {
                                 delta_x: motion.dx(),
                                 delta_y: motion.dy(),
                             },
-                        }));
+                        });
                     }
                 }
                 _ => {}
@@ -174,22 +170,22 @@ impl input::LibinputInterface for LibinputInterface {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct InputEvent {
-    pub key: InputDeviceKey,
-    pub kind: InputEventKind,
+pub enum InputEvent {
+    Dispatch,
+    Device { key: DeviceKey, kind: EventKind },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct InputDeviceKey(usize);
+pub struct DeviceKey(usize);
 
-impl InputDeviceKey {
+impl DeviceKey {
     pub const fn get(self) -> usize {
         self.0
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum InputEventKind {
+pub enum EventKind {
     DeviceAdded,
     DeviceRemoved,
     Keyboard {

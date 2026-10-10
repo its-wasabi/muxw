@@ -13,19 +13,15 @@ impl SeatManager {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let emitter = event_loop.emiter();
         let mut seat = libseat::Seat::open(move |_, seat_event| match seat_event {
-            libseat::SeatEvent::Enable => {
-                emitter.emit(crate::token::Token::Seat(SeatEvent::Enable))
-            }
-            libseat::SeatEvent::Disable => {
-                emitter.emit(crate::token::Token::Seat(SeatEvent::Disable))
-            }
+            libseat::SeatEvent::Enable => emitter.emit(SeatEvent::Enable),
+            libseat::SeatEvent::Disable => emitter.emit(SeatEvent::Disable),
         })?;
 
         event_loop.register_source(
             &seat.get_fd()?,
             polling::PollMode::Edge,
-            crate::token::Token::Seat(SeatEvent::Dispatch),
-        );
+            SeatEvent::Dispatch,
+        )?;
 
         let inner = Inner {
             seat,

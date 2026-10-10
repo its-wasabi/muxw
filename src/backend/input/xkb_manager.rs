@@ -1,5 +1,5 @@
 pub struct Seat {
-    pub keyboards: std::collections::HashMap<super::InputDeviceKey, Keyboard>,
+    pub keyboards: std::collections::HashMap<super::DeviceKey, Keyboard>,
 }
 
 impl Seat {

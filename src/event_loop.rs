@@ -1,3 +1,6 @@
+// TODO: Remove later
+#![allow(unused)]
+
 const SOURCES_DEFAULT_CAPACITY: usize = 128;
 const TIMERS_DEFAULT_CAPACITY: usize = 32;
 const EMITERS_DEFAULT_CAPACITY: usize = 32;
@@ -149,9 +152,9 @@ impl<T: Clone> EventLoop<T> {
         &mut self,
         source: impl polling::AsRawSource + polling::AsSource,
         mode: polling::PollMode,
-        token: T,
+        token: impl Into<T>,
     ) -> std::io::Result<IoKey> {
-        let key = self.sources.insert(TokenEntry::new_io(token, mode));
+        let key = self.sources.insert(TokenEntry::new_io(token.into(), mode));
         let interest = polling::Event::readable(key);
         unsafe { self.poller.add_with_mode(source, interest, mode)? };
         Ok(IoKey(key))
@@ -243,8 +246,11 @@ impl Ord for Timer {
 }
 
 impl<T: Clone> EventLoop<T> {
-    pub fn register_timer(&mut self, mode: TimerMode, token: T) -> TimerKey {
-        let key = TimerKey(self.sources.insert(TokenEntry::new_timer(token, mode)));
+    pub fn register_timer(&mut self, mode: TimerMode, token: impl Into<T>) -> TimerKey {
+        let key = TimerKey(
+            self.sources
+                .insert(TokenEntry::new_timer(token.into(), mode)),
+        );
         let timer = mode.make_timer(key);
         self.timers.push(timer);
         key
@@ -276,8 +282,8 @@ impl<T: Clone> EventSender<T> {
         Self { poller, sender }
     }
 
-    pub fn send(&self, token: T) {
-        self.sender.send(token);
+    pub fn send(&self, token: impl Into<T>) {
+        self.sender.send(token.into());
         self.poller.notify();
     }
 }
@@ -300,8 +306,8 @@ impl<T: Clone> EventEmitter<T> {
         }
     }
 
-    pub fn emit(&self, token: T) {
-        self.emits.borrow_mut().push_back(token);
+    pub fn emit(&self, token: impl Into<T>) {
+        self.emits.borrow_mut().push_back(token.into());
     }
 }
 

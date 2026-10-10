@@ -7,6 +7,7 @@ mod event_loop;
 mod helpers;
 mod renderer;
 mod token;
+mod wayland;
 
 const APP_NAME: &str = helpers::get_app_name();
 const APP_NAME_CSTR: &std::ffi::CStr = helpers::get_app_name_cstr();

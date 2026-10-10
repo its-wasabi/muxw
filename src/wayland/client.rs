@@ -13,6 +13,6 @@ impl wayland_server::backend::ClientData for ClientState {
         _reason: wayland_server::backend::DisconnectReason,
     ) {
         self.event_sender
-            .send(crate::token::Token::WaylandClientDisconnected(client_id));
+            .send(super::Event::ClientDisconnected(client_id));
     }
 }

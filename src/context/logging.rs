@@ -116,12 +116,7 @@ pub fn init_logging(target: &LogTarget) -> Result<LoggerGuard, Box<dyn std::erro
                 std::fs::create_dir_all(parent)?;
             }
 
-            let mut file = open_log_file(file_path)?;
-
-            file.write_all(
-                "\n-[NEW-LOG]---------------------------------------------------------\n"
-                    .as_bytes(),
-            )?;
+            let file = open_log_file(file_path)?;
 
             let (non_blocking, worker_guard) = tracing_appender::non_blocking(file);
             builder.with_writer(non_blocking).with_ansi(false).init();

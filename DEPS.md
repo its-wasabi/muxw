@@ -1,4 +1,0 @@
-# REQUIRED DEPENDENCIES THAT SHOULD BE IN PACKAGE MANAGER INSTALL SCRIP
-- [-] ddcutil
-- [ ] vulkan
-- [ ] wayland
