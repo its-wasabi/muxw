@@ -1,4 +1,5 @@
-mod api;
+// mod api;
+pub mod error;
 
 const ENABLED_LUA_LIBRARIES: mlua::StdLib = mlua::StdLib::ALL_SAFE;
 
@@ -42,13 +43,7 @@ impl Config {
         //     })
         //     .unwrap();
 
-        let source = Self::read_config_source(path)
-            .map_err(|err| crate::error::InitError::Io {
-                action: "read config file",
-                path: Some(path.to_owned()),
-                source: err,
-            })
-            .unwrap();
+        let source = Self::read_config_source(path)?;
 
         // lua.load(&source).exec().unwrap();
         Ok(lua)

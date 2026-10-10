@@ -1,4 +1,5 @@
 mod cli;
+pub mod error;
 pub mod logging;
 mod path;
 
@@ -10,13 +11,12 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new() -> Result<Self, error::Error> {
         use clap::Parser;
         let cli = cli::domain::Cli::parse();
         cli.process()?;
         let path = path::Path::new(cli.config.clone())?;
-
-        let log_target = logging::LogTarget::new(cli.log_to.as_ref())?;
+        let log_target = logging::LogTarget::new(cli.log_to.as_deref())?;
         Ok(Self {
             cli,
             path,
@@ -25,50 +25,36 @@ impl Context {
     }
 }
 
-fn to_absolute(path: std::path::PathBuf) -> Result<std::path::PathBuf, crate::error::PathError> {
-    let absolute_path = if path.is_absolute() {
-        path
-    } else {
-        std::env::current_dir()
-            .map_err(|err| crate::error::PathError::Io {
-                action: "et current directory",
-                path: None,
-                source: err,
-            })?
-            .join(path)
-    };
-
-    absolute_path
-        .canonicalize()
-        .map_err(|err| crate::error::PathError::Io {
-            action: "anonicalize path",
-            path: Some(absolute_path),
-            source: err,
-        })
+fn non_empty_env(name: &str) -> Option<std::ffi::OsString> {
+    std::env::var_os(name).filter(|value| !value.is_empty())
 }
 
-fn expand_tilde(path: std::path::PathBuf) -> Result<std::path::PathBuf, crate::error::PathError> {
-    let str = path.to_string_lossy();
+fn to_absolute(path: std::path::PathBuf) -> Result<std::path::PathBuf, error::Error> {
+    std::path::absolute(&path).map_err(|source| error::Error::MakeAbsolute {
+        input: path,
+        source,
+    })
+}
 
-    if !str.starts_with('~') {
+fn expand_tilde(path: std::path::PathBuf) -> Result<std::path::PathBuf, error::Error> {
+    let Some(text) = path.to_str() else {
+        return Ok(path);
+    };
+    if !text.starts_with('~') {
         return Ok(path);
     }
 
-    let home = std::env::var("HOME").map_err(|_| crate::error::PathError::InvalidPath {
-        input: path.clone(),
-        reason: "HOME environment variable not set",
-    })?;
+    let home = non_empty_env("HOME")
+        .map(std::path::PathBuf::from)
+        .ok_or_else(|| error::Error::HomeNotSet {
+            input: path.clone(),
+        })?;
 
-    let expanded = if str == "~" {
-        std::path::PathBuf::from(home)
-    } else if str.starts_with("~/") {
-        std::path::PathBuf::from(home).join(&str[2..])
+    if text == "~" {
+        Ok(home)
+    } else if let Some(rest) = text.strip_prefix("~/") {
+        Ok(home.join(rest))
     } else {
-        return Err(crate::error::PathError::InvalidPath {
-            input: path,
-            reason: "unsupported tilde expansion (Report an issue)",
-        });
-    };
-
-    Ok(expanded)
+        Err(error::Error::UnsupportedTilde { input: path })
+    }
 }
