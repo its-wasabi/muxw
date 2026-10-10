@@ -7,8 +7,7 @@ pub enum Token {
     Input(crate::backend::input::InputEvent),
     Drm(crate::backend::drm::Event),
     Wayland(crate::wayland::Event),
-
-    Config(crate::config::ConfigRequest),
+    Config(crate::config::Event),
 
     Exit,
 }
@@ -34,5 +33,11 @@ impl From<crate::backend::drm::Event> for Token {
 impl From<crate::wayland::Event> for Token {
     fn from(value: crate::wayland::Event) -> Self {
         Self::Wayland(value)
+    }
+}
+
+impl From<crate::config::Event> for Token {
+    fn from(value: crate::config::Event) -> Self {
+        Self::Config(value)
     }
 }

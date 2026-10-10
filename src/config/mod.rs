@@ -1,14 +1,16 @@
+mod api;
+
 const ENABLED_LUA_LIBRARIES: mlua::StdLib = mlua::StdLib::ALL_SAFE;
 
 pub struct Config {}
 
 impl Config {
     pub fn spawn(
-        path: &std::path::Path,
-        sender: crate::event_loop::EventSender<ConfigRequest>,
-    ) -> Result<crossbeam_channel::Sender<ConfigCommand>, Box<dyn std::error::Error>> {
-        let (command_sender, command_receiver) = crossbeam_channel::unbounded::<ConfigCommand>();
-        let path = path.to_path_buf();
+        context: &crate::context::Context,
+        event_loop: &mut crate::event_loop::EventLoop,
+    ) -> Result<Handle, Box<dyn std::error::Error>> {
+        let (command_sender, command_receiver) = crossbeam_channel::unbounded::<Command>();
+        let path = context.path.config_file.clone();
 
         std::thread::Builder::new()
             .name(String::from("muxw-config"))
@@ -16,14 +18,16 @@ impl Config {
                 let lua = Self::init_lua(&path).unwrap();
                 while let Ok(command) = command_receiver.recv() {
                     match command {
-                        ConfigCommand::Reload => {
+                        Command::Reload => {
                             println!("RELOAD CONFIG");
                         }
                     }
                 }
             })?;
 
-        Ok(command_sender)
+        Ok(Handle {
+            sender: command_sender,
+        })
     }
 
     fn init_lua(path: &std::path::Path) -> mlua::Result<mlua::Lua> {
@@ -70,17 +74,8 @@ impl Config {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConfigRequest {
-    InputDevice,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConfigCommand {
-    Reload,
-    // NOTE: DO NOT USE E.G.: KeyPressed(Key)
-    // Only allowed communication that can notify about key pressed is e.g.: bind response
-    // CallbackTrigger(CallbackId)
+pub struct Handle {
+    sender: crossbeam_channel::Sender<Command>,
 }
 
 // pub struct Config {
@@ -265,3 +260,16 @@ pub enum ConfigCommand {
 //         Ok(())
 //     }
 // }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Event {
+    Test123,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Command {
+    Reload,
+    // NOTE: DO NOT USE E.G.: KeyPressed(Key)
+    // Only allowed communication that can notify about key pressed is e.g.: bind response
+    // CallbackTrigger(CallbackId)
+}

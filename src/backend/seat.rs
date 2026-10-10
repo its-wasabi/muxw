@@ -5,9 +5,9 @@ struct Inner {
     devices: std::collections::HashMap<std::os::unix::io::RawFd, libseat::Device>,
 }
 
-pub struct SeatManager(std::rc::Rc<std::cell::RefCell<Inner>>);
+pub struct Seat(std::rc::Rc<std::cell::RefCell<Inner>>);
 
-impl SeatManager {
+impl Seat {
     pub fn new(
         event_loop: &mut crate::event_loop::EventLoop,
     ) -> Result<Self, Box<dyn std::error::Error>> {
@@ -98,7 +98,7 @@ impl SeatHandle {
     }
 }
 
-impl SeatManager {
+impl Seat {
     pub fn handle(&self) -> SeatHandle {
         SeatHandle(self.0.clone())
     }

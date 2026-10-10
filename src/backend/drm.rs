@@ -24,14 +24,14 @@ use std::path::Path;
 
 const DEVICES_DEFAULT_CAPACITY: usize = 4;
 
-pub struct DrmManager {
+pub struct Drm {
     cards: slab::Slab<DrmCard>,
     monitor: udev::MonitorSocket,
     device_keys: HashMap<u64, DrmCardKey>,
     active: bool,
 }
 
-impl DrmManager {
+impl Drm {
     pub fn new(
         event_loop: &mut crate::event_loop::EventLoop,
         renderer: &crate::renderer::Renderer,

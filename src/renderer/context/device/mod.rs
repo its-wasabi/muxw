@@ -1,7 +1,7 @@
 mod logical;
 mod physical;
 
-const DEVICE_EXTENSIONS: &[*const std::ffi::c_char] = &crate::helpers::as_const_pointers([
+const DEVICE_EXTENSIONS: &[*const std::ffi::c_char] = &crate::meta::as_const_pointers([
     ash::ext::image_drm_format_modifier::NAME,
     ash::ext::external_memory_dma_buf::NAME,
     ash::khr::external_memory_fd::NAME,

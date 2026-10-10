@@ -1,10 +1,10 @@
 #[cfg(debug_assertions)]
 const INSTANCE_LAYERS: &[*const std::ffi::c_char] =
-    &crate::helpers::as_const_pointers([c"VK_LAYER_KHRONOS_validation"]);
+    &crate::meta::as_const_pointers([c"VK_LAYER_KHRONOS_validation"]);
 #[cfg(not(debug_assertions))]
-const INSTANCE_LAYERS: &[*const std::ffi::c_char] = &crate::helpers::as_const_pointers([]);
+const INSTANCE_LAYERS: &[*const std::ffi::c_char] = &crate::meta::as_const_pointers([]);
 
-const INSTANCE_EXTENSIONS: &[*const std::ffi::c_char] = &crate::helpers::as_const_pointers([
+const INSTANCE_EXTENSIONS: &[*const std::ffi::c_char] = &crate::meta::as_const_pointers([
     ash::khr::external_memory_capabilities::NAME,
     ash::khr::external_semaphore_capabilities::NAME,
     ash::khr::get_physical_device_properties2::NAME,

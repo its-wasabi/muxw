@@ -4,14 +4,14 @@ use input::event::{EventTrait, keyboard::KeyboardEventTrait, pointer::PointerScr
 
 mod xkb_manager;
 
-pub struct InputManager {
+pub struct Input {
     libinput: input::Libinput,
     devices: slab::Slab<input::Device>,
     device_keys: std::collections::HashMap<input::Device, DeviceKey>,
     emitter: crate::event_loop::EventEmitter<crate::token::Token>,
 }
 
-impl InputManager {
+impl Input {
     pub fn new(
         event_loop: &mut crate::event_loop::EventLoop,
         seat_handle: crate::backend::seat::SeatHandle,

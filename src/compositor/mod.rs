@@ -1,41 +1,42 @@
 pub struct Compositor {
     event_loop: crate::event_loop::EventLoop,
     triggered_events: Vec<crate::token::Token>,
+    config: crate::config::Handle,
 
-    seat_manager: crate::backend::seat::SeatManager,
-    input_manager: crate::backend::input::InputManager,
-    drm_manager: crate::backend::drm::DrmManager,
-
-    wayland_server: crate::wayland::WaylandServer,
-
+    seat: crate::backend::seat::Seat,
+    input: crate::backend::input::Input,
     renderer: crate::renderer::Renderer,
+    drm: crate::backend::drm::Drm,
+
+    wayland: crate::wayland::Wayland,
 }
 
 impl Compositor {
     pub fn new(context: &crate::context::Context) -> Result<Self, Box<dyn std::error::Error>> {
         let mut event_loop = crate::event_loop::EventLoop::new()?;
         let triggered_events = Vec::new();
+        let config = crate::config::Config::spawn(context, &mut event_loop)?;
 
-        let seat_manager = crate::backend::seat::SeatManager::new(&mut event_loop)?;
+        let seat_manager = crate::backend::seat::Seat::new(&mut event_loop)?;
         let input_manager =
-            crate::backend::input::InputManager::new(&mut event_loop, seat_manager.handle())?;
+            crate::backend::input::Input::new(&mut event_loop, seat_manager.handle())?;
 
         let renderer = crate::renderer::Renderer::new()?;
-        let drm_manager = crate::backend::drm::DrmManager::new(&mut event_loop, &renderer)?;
+        let drm_manager = crate::backend::drm::Drm::new(&mut event_loop, &renderer)?;
 
-        let wayland_server = crate::wayland::WaylandServer::new(context, &mut event_loop)?;
+        let wayland_server = crate::wayland::Wayland::new(context, &mut event_loop)?;
 
         Ok(Self {
             event_loop,
             triggered_events,
+            config,
 
-            seat_manager,
-            input_manager,
-            drm_manager,
-
-            wayland_server,
-
+            seat: seat_manager,
+            input: input_manager,
             renderer,
+            drm: drm_manager,
+
+            wayland: wayland_server,
         })
     }
 
@@ -49,7 +50,7 @@ impl Compositor {
                 match token {
                     crate::token::Token::Seat(event) => match event {
                         crate::backend::seat::SeatEvent::Dispatch => {
-                            if let Err(error) = self.seat_manager.dispatch() {
+                            if let Err(error) = self.seat.dispatch() {
                                 tracing::error!(?error, "Failed to dispatch libseat seat");
                             }
                         }
@@ -73,7 +74,7 @@ impl Compositor {
 
                     crate::token::Token::Input(event) => match event {
                         crate::backend::input::InputEvent::Dispatch => {
-                            self.input_manager.dispatch()?;
+                            self.input.dispatch()?;
                         }
 
                         crate::backend::input::InputEvent::Device { key: _, kind } => {
@@ -96,13 +97,12 @@ impl Compositor {
                     crate::token::Token::Drm(event) => match event {
                         crate::backend::drm::Event::Udev => {
                             tracing::trace!("DrmUdev monitor event triggered");
-                            self.drm_manager
-                                .dispatch_udev(&mut self.event_loop, &self.renderer);
+                            self.drm.dispatch_udev(&mut self.event_loop, &self.renderer);
                         }
 
                         crate::backend::drm::Event::Card(drm_card_key) => {
                             tracing::trace!(?drm_card_key, "DrmCard event triggered");
-                            self.drm_manager.dispatch_card(
+                            self.drm.dispatch_card(
                                 drm_card_key,
                                 &self.renderer,
                                 [0.0, 0.0, 0.0, 1.0],
@@ -111,17 +111,19 @@ impl Compositor {
                     },
 
                     crate::token::Token::Wayland(event) => {
-                        self.wayland_server.dispatch(event, &mut self.event_loop);
+                        self.wayland.dispatch(event, &self.event_loop)?;
                     }
 
                     crate::token::Token::Config(command) => {
                         tracing::debug!(?command, "Config command received");
+                        eprintln!("Apply config logic here");
+                        self.event_loop.emiter().emit(crate::token::Token::Exit);
                     }
 
                     crate::token::Token::Exit => {
                         tracing::debug!("Exiting");
 
-                        if let Err(error) = self.seat_manager.disable() {
+                        if let Err(error) = self.seat.disable() {
                             tracing::error!(?error, "Failed to ack Seat Disable during Shutdown");
                         }
 

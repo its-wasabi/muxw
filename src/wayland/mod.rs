@@ -3,13 +3,13 @@ use std::os::fd::AsFd;
 mod client;
 mod state;
 
-pub struct WaylandServer {
+pub struct Wayland {
     display: wayland_server::Display<state::State>,
     socket: wayland_server::ListeningSocket,
     state: state::State,
 }
 
-impl WaylandServer {
+impl Wayland {
     pub fn new(
         context: &crate::context::Context,
         event_loop: &mut crate::event_loop::EventLoop,

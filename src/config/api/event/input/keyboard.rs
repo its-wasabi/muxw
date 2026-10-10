@@ -70,15 +70,15 @@ pub fn create_event_input_keyboard_table(
     //         action: "set Mux.event.input.keyboard.keyrepeat tag",
     //     })?;
 
-    event_input_keyboard_table.set(
-        "added",
-        muxw_types::config::EventDiscriminant::KeyboardAdded,
-    );
+    // event_input_keyboard_table.set(
+    //     "added",
+    //     muxw_types::config::EventDiscriminant::KeyboardAdded,
+    // );
 
-    event_input_keyboard_table.set(
-        "inactive",
-        muxw_types::config::EventDiscriminant::KeyboardInactive(None),
-    );
+    // event_input_keyboard_table.set(
+    //     "inactive",
+    //     muxw_types::config::EventDiscriminant::KeyboardInactive(None),
+    // );
 
     // event_input_keyboard_table
     //     .set(

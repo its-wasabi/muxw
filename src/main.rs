@@ -4,14 +4,14 @@ mod config;
 mod context;
 mod error;
 mod event_loop;
-mod helpers;
+mod meta;
 mod renderer;
 mod token;
 mod wayland;
 
-const APP_NAME: &str = helpers::get_app_name();
-const APP_NAME_CSTR: &std::ffi::CStr = helpers::get_app_name_cstr();
-const APP_VERSION: helpers::Version = helpers::get_app_version();
+const APP_NAME: &str = meta::get_app_name();
+const APP_NAME_CSTR: &std::ffi::CStr = meta::get_app_name_cstr();
+const APP_VERSION: meta::Version = meta::get_app_version();
 
 pub const DEFAULT_CONFIG: &str = /* lua */
     r#"
