@@ -2,7 +2,6 @@ mod backend;
 mod compositor;
 mod config;
 mod context;
-mod error;
 mod event_loop;
 mod meta;
 mod renderer;
