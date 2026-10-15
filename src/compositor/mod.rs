@@ -65,10 +65,7 @@ impl Compositor {
                         crate::backend::seat::SeatEvent::Disable => {
                             tracing::debug!("Seat Disable <- THE IMPORTANT ONE");
                             // self.drm_manager.pause();
-                            // self.drm_manager.drop_master();
-                            // if let Err(error) = self.seat_manager.disable() {
-                            //     tracing::error!(?error, "Failed to Disable Seat");
-                            // }
+                            self.drm.drop_master()?;
                         }
                     },
 
@@ -94,21 +91,10 @@ impl Compositor {
                         }
                     },
 
-                    crate::token::Token::Drm(event) => match event {
-                        crate::backend::drm::Event::Udev => {
-                            tracing::trace!("DrmUdev monitor event triggered");
-                            self.drm.dispatch_udev(&mut self.event_loop, &self.renderer);
-                        }
-
-                        crate::backend::drm::Event::Card(drm_card_key) => {
-                            tracing::trace!(?drm_card_key, "DrmCard event triggered");
-                            self.drm.dispatch_card(
-                                drm_card_key,
-                                &self.renderer,
-                                [0.0, 0.0, 0.0, 1.0],
-                            );
-                        }
-                    },
+                    crate::token::Token::Drm(event) => {
+                        tracing::trace!("Drm Event triggered");
+                        self.drm.dispatch(&mut self.event_loop, event)?;
+                    }
 
                     crate::token::Token::Wayland(event) => {
                         self.wayland.dispatch(event, &self.event_loop)?;

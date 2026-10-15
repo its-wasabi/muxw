@@ -1,6 +1,3 @@
-// TODO: Remove later
-#![allow(unused)]
-
 const SOURCES_DEFAULT_CAPACITY: usize = 128;
 const TIMERS_DEFAULT_CAPACITY: usize = 32;
 const EMITERS_DEFAULT_CAPACITY: usize = 32;

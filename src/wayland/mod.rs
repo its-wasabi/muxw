@@ -1,6 +1,7 @@
 use std::os::fd::AsFd;
 
 mod client;
+pub mod error;
 mod state;
 
 pub struct Wayland {
@@ -13,32 +14,40 @@ impl Wayland {
     pub fn new(
         context: &crate::context::Context,
         event_loop: &mut crate::event_loop::EventLoop,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        let mut display = wayland_server::Display::new()?;
-        let display_handle = display.handle();
-        display_handle
-    .create_global::<state::State, wayland_server::protocol::wl_compositor::WlCompositor, ()>(
-        5,
-        (),
-    );
-        let socket = if let Some(socket_name) = &context.cli.socket {
-            wayland_server::ListeningSocket::bind(socket_name)?
-        } else {
-            wayland_server::ListeningSocket::bind_auto("wayland", 0..=100)?
-        };
-        event_loop.register_source(&socket.as_fd(), polling::PollMode::Edge, Event::Socket)?;
-        event_loop.register_source(
-            &display.backend().poll_fd().as_fd(),
-            polling::PollMode::Edge,
-            Event::Display,
-        )?;
+    ) -> Result<Self, error::Error> {
+        let mut display = wayland_server::Display::new().map_err(error::Error::CreateDisplay)?;
+        display.handle().create_global::<
+            state::State,
+            wayland_server::protocol::wl_compositor::WlCompositor,
+            (),
+        >(5, ());
 
-        let state = state::State::new(event_loop);
+        let socket = match &context.cli.socket {
+            Some(name) => wayland_server::ListeningSocket::bind(name).map_err(|source| {
+                error::Error::BindSocket {
+                    name: name.clone(),
+                    source: Box::new(source),
+                }
+            })?,
+            None => wayland_server::ListeningSocket::bind_auto("wayland", 0..=100)
+                .map_err(|source| error::Error::BindAutoSocket(Box::new(source)))?,
+        };
+
+        event_loop
+            .register_source(&socket.as_fd(), polling::PollMode::Edge, Event::Socket)
+            .map_err(error::Error::RegisterSocket)?;
+        event_loop
+            .register_source(
+                &display.backend().poll_fd().as_fd(),
+                polling::PollMode::Edge,
+                Event::Display,
+            )
+            .map_err(error::Error::RegisterDisplay)?;
 
         Ok(Self {
             display,
             socket,
-            state,
+            state: state::State::new(event_loop),
         })
     }
 
@@ -46,10 +55,10 @@ impl Wayland {
         &mut self,
         event: Event,
         event_loop: &crate::event_loop::EventLoop,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), error::Error> {
         match event {
-            Event::Socket => self.handle_socket(event_loop),
-            Event::Display => self.handle_display(),
+            Event::Socket => self.accept_clients(event_loop),
+            Event::Display => self.dispatch_clients(),
             Event::ClientDisconnected(client_id) => {
                 tracing::info!(?client_id, "Wayland client disconnected");
                 Ok(())
@@ -57,39 +66,46 @@ impl Wayland {
         }
     }
 
-    fn handle_socket(
+    fn accept_clients(
         &self,
         event_loop: &crate::event_loop::EventLoop,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(stream) = self.socket.accept()? {
+    ) -> Result<(), error::Error> {
+        // The socket is registered edge-triggered, so every pending connection
+        // has to be drained now: no further wakeup comes for ones left queued.
+        while let Some(stream) = self.socket.accept().map_err(error::Error::AcceptClient)? {
             let mut display_handle = self.display.handle();
-            let client_state = client::Client {
+            let client_data = client::Client {
                 event_sender: event_loop.sender(),
             };
 
-            let client = display_handle.insert_client(stream, std::sync::Arc::new(client_state))?;
+            let client = display_handle
+                .insert_client(stream, std::sync::Arc::new(client_data))
+                .map_err(error::Error::InsertClient)?;
 
-            if let Ok(credentials) = client.get_credentials(&display_handle) {
-                tracing::info!(
+            match client.get_credentials(&display_handle) {
+                Ok(credentials) => tracing::info!(
                     pid = credentials.pid,
                     uid = credentials.uid,
                     gid = credentials.gid,
                     "New Wayland client connected"
-                );
-            } else {
-                tracing::info!("New Wayland client connected (credentials unavailable)");
+                ),
+                Err(_) => {
+                    tracing::info!("New Wayland client connected (credentials unavailable)");
+                }
             }
         }
 
         Ok(())
     }
 
-    fn handle_display(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn dispatch_clients(&mut self) -> Result<(), error::Error> {
         tracing::trace!("Dispatching Wayland display clients");
-        self.display.dispatch_clients(&mut self.state)?;
-        self.display.flush_clients()?;
-
-        Ok(())
+        self.display
+            .dispatch_clients(&mut self.state)
+            .map_err(error::Error::DispatchClients)?;
+        self.display
+            .flush_clients()
+            .map_err(error::Error::FlushClients)
     }
 }
 

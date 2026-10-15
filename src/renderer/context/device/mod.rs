@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 mod logical;
 mod physical;
 
@@ -17,22 +19,22 @@ pub(super) struct Device {
 }
 
 impl Device {
-    fn new(physical: physical::PhysicalDevice) -> Self {
+    const fn new(physical: physical::PhysicalDevice) -> Self {
         Self {
             physical,
             logical: None,
         }
     }
 
-    fn get_physical(&self) -> &physical::PhysicalDevice {
+    const fn get_physical(&self) -> &physical::PhysicalDevice {
         &self.physical
     }
 
-    fn get_logical(&self) -> Option<&logical::LogicalDevice> {
+    const fn get_logical(&self) -> Option<&logical::LogicalDevice> {
         self.logical.as_ref()
     }
 
-    fn get_logical_mut(&mut self) -> Option<&mut logical::LogicalDevice> {
+    const fn get_logical_mut(&mut self) -> Option<&mut logical::LogicalDevice> {
         self.logical.as_mut()
     }
 
