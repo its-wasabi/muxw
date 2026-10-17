@@ -10,43 +10,36 @@ const OUTPUTS_DEFAULT_CAPACITY: usize = 1;
 
 slotmap::new_key_type! {
     pub struct OutputKey;
+    pub struct DeviceKey;
 }
 
 pub struct Drm {
     monitor: udev::MonitorSocket,
-
-    // TODO: Make it addressed by devnum
-    devices: Vec<device::Device>,
+    devices: slotmap::SlotMap<DeviceKey, device::Device>,
     outputs: slotmap::SlotMap<OutputKey, device::Output>,
 }
 
 impl Drm {
     pub fn new(
         event_loop: &mut crate::event_loop::EventLoop,
-        _renderer: &crate::renderer::Renderer,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let monitor = udev::MonitorBuilder::new()?
-            .match_subsystem("drm")?
+            .match_subsystem_devtype("drm", "drm_minor")?
             .listen()?;
         event_loop.register_source(&monitor.as_fd(), polling::PollMode::Edge, Event::Udev)?;
 
         let mut drm = Self {
             monitor,
-
-            devices: Vec::with_capacity(DEVICES_DEFAULT_CAPACITY),
+            devices: slotmap::SlotMap::with_capacity_and_key(DEVICES_DEFAULT_CAPACITY),
             outputs: slotmap::SlotMap::with_capacity_and_key(OUTPUTS_DEFAULT_CAPACITY),
         };
 
         let mut enumerator = udev::Enumerator::new()?;
         enumerator.match_subsystem("drm")?;
-        let connected_devices = enumerator.scan_devices()?.collect::<Vec<_>>();
-        for device in connected_devices {
-            if let Ok(Some(device)) = device::Device::new(event_loop, &device) {
-                drm.add_device(device);
-                tracing::info!("Added card success");
-            } else {
-                tracing::error!("Failed to add card {:?}", device.devnode());
-            }
+        enumerator.match_property("DEVTYPE", "drm_minor")?;
+        enumerator.match_is_initialized()?;
+        for udev_device in enumerator.scan_devices()? {
+            drm.add_device(event_loop, &udev_device);
         }
 
         Ok(drm)
@@ -58,10 +51,14 @@ impl Drm {
         event: Event,
     ) -> Result<(), Box<dyn std::error::Error>> {
         match event {
-            Event::Udev => self.handle_udev(event_loop),
-            Event::Device(device_key) => todo!(),
-            Event::Output(output_key) => todo!(),
+            // Event::Frame => todo!(),
+            // Event::Udev => self.handle_udev(event_loop),
+            // Event::Device(device_key) => todo!(),
+            // Event::Output(output_key) => todo!(),
+            _ => (),
         }
+
+        Ok(())
     }
 
     fn handle_udev(
@@ -72,7 +69,7 @@ impl Drm {
         for event in events {
             match event.event_type() {
                 udev::EventType::Add => {
-                    self.add_device(device::Device::new(event_loop, &event.device())?.unwrap());
+                    self.add_device(event_loop, &event.device());
                 }
                 udev::EventType::Remove => self.remove_device(),
                 // udev::EventType::Change => todo!("Todo Handle DRM Change Event"),
@@ -87,16 +84,26 @@ impl Drm {
         Ok(())
     }
 
-    fn add_device(&mut self, device: device::Device) {
-        // todo!("Add device to slotmap and query outputs and add to slotmap")
+    fn add_device(
+        &mut self,
+        event_loop: &mut crate::event_loop::EventLoop,
+        device: &udev::Device,
+    ) -> Result<Option<DeviceKey>, Box<dyn std::error::Error>> {
+        let Some(key) = device::Device::register_self(event_loop, &mut self.devices, device)?
+        else {
+            // return todo!("Create some not a card error");
+            return Ok(None);
+        };
+
+        Ok(Some(key))
     }
 
     fn remove_device(&mut self) {
-        // todo!("Remomve Device and Outputs from slotmap")
+        todo!("Remomve Device and Outputs from slotmap")
     }
 
     pub fn drop_master(&self) -> std::io::Result<()> {
-        for device in &self.devices {
+        for (_, device) in &self.devices {
             device.release_master()?;
         }
 
@@ -106,8 +113,9 @@ impl Drm {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
+    Frame,
     Udev,
-    Device(u64),
+    Device(DeviceKey),
     Output(OutputKey),
 }
 

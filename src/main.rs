@@ -29,9 +29,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(debug_assertions)]
     println!("{context:#?}");
 
-    if let Err(error) = compositor::Compositor::new(&context)?.run() {
-        tracing::error!("{error:?}");
-    }
+    let compositor = compositor::Compositor::new(&context).inspect_err(|error| {
+        tracing::error!(error);
+    })?;
+
+    compositor.run().inspect_err(|error| {
+        tracing::error!(error);
+    })?;
 
     Ok(())
 }

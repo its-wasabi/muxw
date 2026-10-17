@@ -22,7 +22,7 @@ impl Compositor {
             crate::backend::input::Input::new(&mut event_loop, seat_manager.handle())?;
 
         let renderer = crate::renderer::Renderer::new()?;
-        let drm_manager = crate::backend::drm::Drm::new(&mut event_loop, &renderer)?;
+        let drm_manager = crate::backend::drm::Drm::new(&mut event_loop)?;
 
         let wayland_server = crate::wayland::Wayland::new(context, &mut event_loop)?;
 

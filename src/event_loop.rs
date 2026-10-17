@@ -2,40 +2,6 @@ const SOURCES_DEFAULT_CAPACITY: usize = 128;
 const TIMERS_DEFAULT_CAPACITY: usize = 32;
 const EMITERS_DEFAULT_CAPACITY: usize = 32;
 
-#[derive(Debug, Clone, Copy)]
-struct TokenEntry<T> {
-    token: T,
-    kind: EntryKind,
-}
-
-impl<T> TokenEntry<T> {
-    const fn new_io(token: T, mode: polling::PollMode) -> Self {
-        let kind = EntryKind::Io(mode);
-        Self { token, kind }
-    }
-
-    const fn new_timer(token: T, mode: TimerMode) -> Self {
-        let kind = EntryKind::Timer(mode);
-        Self { token, kind }
-    }
-
-    const fn is_oneshot(&self) -> bool {
-        matches!(
-            self.kind,
-            EntryKind::Dead
-                | EntryKind::Timer(TimerMode::Delay(_) | TimerMode::Exact(_))
-                | EntryKind::Io(polling::PollMode::Oneshot | polling::PollMode::EdgeOneshot)
-        )
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum EntryKind {
-    Io(polling::PollMode),
-    Timer(TimerMode),
-    Dead,
-}
-
 pub struct EventLoop<T: Clone = crate::token::Token> {
     poller: std::sync::Arc<polling::Poller>,
 
@@ -134,6 +100,40 @@ impl<T: Clone> EventLoop<T> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct TokenEntry<T> {
+    token: T,
+    kind: EntryKind,
+}
+
+impl<T> TokenEntry<T> {
+    const fn new_io(token: T, mode: polling::PollMode) -> Self {
+        let kind = EntryKind::Io(mode);
+        Self { token, kind }
+    }
+
+    const fn new_timer(token: T, mode: TimerMode) -> Self {
+        let kind = EntryKind::Timer(mode);
+        Self { token, kind }
+    }
+
+    const fn is_oneshot(&self) -> bool {
+        matches!(
+            self.kind,
+            EntryKind::Dead
+                | EntryKind::Timer(TimerMode::Delay(_) | TimerMode::Exact(_))
+                | EntryKind::Io(polling::PollMode::Oneshot | polling::PollMode::EdgeOneshot)
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum EntryKind {
+    Io(polling::PollMode),
+    Timer(TimerMode),
+    Dead,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IoKey(usize);
 
@@ -151,28 +151,29 @@ impl<T: Clone> EventLoop<T> {
         mode: polling::PollMode,
         token: impl Into<T>,
     ) -> std::io::Result<IoKey> {
-        let key = self.sources.insert(TokenEntry::new_io(token.into(), mode));
+        let entry = TokenEntry::new_io(token.into(), mode);
+        let key = self.sources.insert(entry);
         let interest = polling::Event::readable(key);
         unsafe { self.poller.add_with_mode(source, interest, mode)? };
         Ok(IoKey(key))
     }
 
-    pub fn deregister_source(
-        &mut self,
-        key: IoKey,
-        source: impl polling::AsSource,
-    ) -> std::io::Result<()> {
+    pub fn deregister_source(&mut self, key: IoKey, source: impl polling::AsSource) {
         if self.sources.try_remove(key.get()).is_none() {
-            return Ok(());
+            tracing::trace!(?key, "attempted to deregister an unknown io source");
+            return;
         }
 
-        self.poller
-            .delete(source)
-            .or_else(|error| match error.kind() {
-                // TODO: Think if you should leave only NotFound ErrorKind
-                std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput => Ok(()),
-                _ => Err(error),
-            })
+        if let Err(error) = self.poller.delete(source) {
+            match error.kind() {
+                std::io::ErrorKind::NotFound => {
+                    tracing::trace!("Io source already removed from poller");
+                }
+                _ => {
+                    tracing::error!(?key, "failed to delete source from poller: {error:?}");
+                }
+            }
+        }
     }
 }
 
@@ -244,10 +245,8 @@ impl Ord for Timer {
 
 impl<T: Clone> EventLoop<T> {
     pub fn register_timer(&mut self, mode: TimerMode, token: impl Into<T>) -> TimerKey {
-        let key = TimerKey(
-            self.sources
-                .insert(TokenEntry::new_timer(token.into(), mode)),
-        );
+        let entry = TokenEntry::new_timer(token.into(), mode);
+        let key = TimerKey(self.sources.insert(entry));
         let timer = mode.make_timer(key);
         self.timers.push(timer);
         key
@@ -256,12 +255,23 @@ impl<T: Clone> EventLoop<T> {
     pub fn lazy_deregister_timer(&mut self, key: TimerKey) {
         if let Some(entry) = self.sources.get_mut(key.get()) {
             entry.kind = EntryKind::Dead;
+        } else {
+            tracing::trace!("Timer already removed from poller");
         }
     }
 
     pub fn deregister_timer(&mut self, key: TimerKey) {
-        self.sources.try_remove(key.get());
+        if self.sources.try_remove(key.get()).is_none() {
+            tracing::trace!(?key, "attempted to deregister an unknown TimerKey");
+            return;
+        }
+
+        let prev_len = self.timers.len();
         self.timers.retain(|timer| timer.key != key);
+
+        if self.timers.len() == prev_len {
+            tracing::trace!(?key, "timer already expired or removed from queue");
+        }
     }
 }
 
