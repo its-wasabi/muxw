@@ -19,6 +19,7 @@ pub struct Drm {
     monitor: udev::MonitorSocket,
     devices: slotmap::SlotMap<DeviceKey, device::Device>,
     outputs: slotmap::SlotMap<OutputKey, device::Output>,
+    handle: crate::event_loop::IoHandle<crate::token::Token>,
 }
 
 impl Drm {
@@ -29,17 +30,18 @@ impl Drm {
             .match_subsystem_devtype("drm", "drm_minor")?
             .listen()?;
 
-        event_loop.register_io(
+        let handle = event_loop.register_fd(
             &monitor,
             crate::event_loop::Interest::Readable,
-            polling::PollMode::Edge,
+            // polling::PollMode::Edge,
             Event::Udev,
-        );
+        )?;
 
         let mut drm = Self {
             monitor,
             devices: slotmap::SlotMap::with_capacity_and_key(DEVICES_DEFAULT_CAPACITY),
             outputs: slotmap::SlotMap::with_capacity_and_key(OUTPUTS_DEFAULT_CAPACITY),
+            handle,
         };
 
         let mut enumerator = udev::Enumerator::new()?;

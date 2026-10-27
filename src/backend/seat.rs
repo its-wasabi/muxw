@@ -17,10 +17,10 @@ impl Seat {
             libseat::SeatEvent::Disable => emitter.emit(SeatEvent::Disable),
         })?;
 
-        event_loop.register_io(
+        event_loop.register_fd(
             &seat.get_fd()?,
             crate::event_loop::Interest::Readable,
-            polling::PollMode::Edge,
+            // polling::PollMode::Edge,
             SeatEvent::Dispatch,
         )?;
 

@@ -14,7 +14,7 @@ pub struct EventLoop<T: Clone = crate::token::Token> {
     poller: std::sync::Arc<polling::Poller>,
     events: polling::Events,
 
-    sources: io::Sources<T>,
+    sources: std::rc::Rc<io::Sources<T>>,
     timers: timer::Timers<T>,
     emitted: std::rc::Rc<std::cell::RefCell<Vec<T>>>,
     mailbox: sender::Mailbox<T>,
@@ -24,7 +24,7 @@ impl<T: Clone> EventLoop<T> {
     pub fn new() -> std::io::Result<Self> {
         let poller = std::sync::Arc::new(polling::Poller::new()?);
         let events = polling::Events::new();
-        let sources = io::Sources::new();
+        let sources = std::rc::Rc::new(io::Sources::new(poller.clone()));
         let timers = timer::Timers::new();
         let emitted = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
         let mailbox = sender::Mailbox::new();

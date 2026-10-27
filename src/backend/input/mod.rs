@@ -9,6 +9,7 @@ pub struct Input {
     devices: slab::Slab<input::Device>,
     device_keys: std::collections::HashMap<input::Device, DeviceKey>,
     emitter: crate::event_loop::Emitter<crate::token::Token>,
+    handle: crate::event_loop::IoHandle<crate::token::Token>,
 }
 
 impl Input {
@@ -21,10 +22,10 @@ impl Input {
             Box::<dyn std::error::Error>::from("Failed to assign udev seat: seat0")
         })?;
 
-        event_loop.register_io(
+        let handle = event_loop.register_fd(
             &libinput.as_fd(),
             crate::event_loop::Interest::Readable,
-            polling::PollMode::Edge,
+            // polling::PollMode::Edge,
             InputEvent::Dispatch,
         )?;
 
@@ -33,6 +34,7 @@ impl Input {
             devices: slab::Slab::with_capacity(1),
             device_keys: std::collections::HashMap::with_capacity(1),
             emitter: event_loop.emitter(),
+            handle,
         })
     }
 

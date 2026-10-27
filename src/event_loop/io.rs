@@ -1,16 +1,18 @@
-use std::os::fd::AsRawFd;
+const DEFAULT_CAPACITY: usize = 32;
 
 slotmap::new_key_type! {
     struct IoKey;
 }
 
 impl Into<usize> for IoKey {
+    #[inline]
     fn into(self) -> usize {
         self.0.as_ffi() as usize
     }
 }
 
 impl From<usize> for IoKey {
+    #[inline]
     fn from(value: usize) -> Self {
         slotmap::KeyData::from_ffi(value as u64).into()
     }
@@ -19,43 +21,44 @@ impl From<usize> for IoKey {
 pub enum Interest {
     Readable,
     Writable,
+    Both,
 }
 
-pub(super) struct Sources<T>(std::rc::Rc<std::cell::RefCell<slotmap::SlotMap<IoKey, T>>>);
+#[derive(Clone)]
+pub(super) struct Sources<T> {
+    poller: std::sync::Arc<polling::Poller>,
+    tokens: std::cell::RefCell<slotmap::SlotMap<IoKey, T>>,
+}
 
 impl<T> Sources<T> {
-    pub(super) fn new() -> Self {
-        Self(std::rc::Rc::new(std::cell::RefCell::new(
-            slotmap::SlotMap::with_key(),
-        )))
+    pub(super) fn new(poller: std::sync::Arc<polling::Poller>) -> Self {
+        let map = slotmap::SlotMap::with_capacity_and_key(DEFAULT_CAPACITY);
+        let tokens = std::cell::RefCell::new(map);
+        Sources { poller, tokens }
     }
 
+    #[inline]
     fn insert(&self, token: T) -> IoKey {
-        self.0.borrow_mut().insert(token)
+        self.tokens.borrow_mut().insert(token)
     }
 
+    #[inline]
     fn remove(&self, key: IoKey) {
-        self.0.borrow_mut().remove(key);
-    }
-}
-
-impl<T> Clone for Sources<T> {
-    fn clone(&self) -> Self {
-        Self(std::rc::Rc::clone(&self.0))
+        self.tokens.borrow_mut().remove(key);
     }
 }
 
 pub struct Handle<T> {
-    fd: std::os::fd::OwnedFd,
-    key: IoKey,
-    poller: std::sync::Arc<polling::Poller>,
-    sources: Sources<T>,
+    raw_fd: std::os::fd::RawFd,
+    io_key: IoKey,
+    sources: std::rc::Rc<Sources<T>>,
 }
 
 impl<T> Handle<T> {
     fn cancel(&self) {
-        self.sources.remove(self.key);
-        if let Err(error) = self.poller.delete(&self.fd) {
+        self.sources.remove(self.io_key);
+        let fd = unsafe { std::os::fd::BorrowedFd::borrow_raw(self.raw_fd) };
+        if let Err(error) = self.sources.poller.delete(fd) {
             if error.kind() != std::io::ErrorKind::NotFound {
                 tracing::error!(?error, "failed to delete io source from poller");
             }
@@ -63,42 +66,51 @@ impl<T> Handle<T> {
     }
 }
 
+// FIX: Some systems break after implementing that fix that
+impl<T> Drop for Handle<T> {
+    fn drop(&mut self) {
+        self.cancel();
+    }
+}
+
 impl<T: Clone> super::EventLoop<T> {
-    pub fn register_io<S: std::os::fd::AsFd>(
+    pub fn register_fd<S: polling::AsRawSource>(
         &mut self,
         source: S,
         interest: Interest,
-        mode: polling::PollMode,
         token: impl Into<T>,
     ) -> Result<Handle<T>, std::io::Error> {
-        let fd = source.as_fd().try_clone_to_owned()?;
-        let key: IoKey = self.sources.insert(token.into());
+        use std::os::fd::AsRawFd;
+        let raw_fd = source.raw().as_raw_fd();
+
+        let mode = polling::PollMode::Edge;
+        let io_key: IoKey = self.sources.insert(token.into());
         let interest = match interest {
-            Interest::Readable => polling::Event::readable(key.into()),
-            Interest::Writable => polling::Event::writable(key.into()),
+            Interest::Readable => polling::Event::readable(io_key.into()),
+            Interest::Writable => polling::Event::writable(io_key.into()),
+            Interest::Both => polling::Event::all(io_key.into()),
         };
 
-        if let Err(error) = unsafe { self.poller.add_with_mode(&fd, interest, mode) } {
-            self.sources.remove(key);
+        if let Err(error) = unsafe { self.poller.add_with_mode(source, interest, mode) } {
+            self.sources.remove(io_key);
             tracing::error!(?error, "failed to add io source to poller");
             return Err(error);
         }
 
         Ok(Handle {
-            fd,
-            key,
-            poller: self.poller.clone(),
+            raw_fd,
+            io_key,
             sources: self.sources.clone(),
         })
     }
 
     pub(super) fn drain_ready_io_into(&self, triggered: &mut Vec<T>) {
-        let sources = self.sources.0.borrow();
+        let tokens = self.sources.tokens.borrow();
         triggered.reserve(self.events.len());
         triggered.extend(
             self.events
                 .iter()
-                .filter_map(|event| sources.get(event.key.into()).cloned()),
+                .filter_map(|event| tokens.get(event.key.into()).cloned()),
         );
     }
 }

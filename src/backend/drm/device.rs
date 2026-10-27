@@ -31,10 +31,10 @@ impl Device {
             .open(devnode)?;
 
         Ok(Some(device_list.try_insert_with_key(|key| {
-            let handle = event_loop.register_io(
+            let handle = event_loop.register_fd(
                 &file,
                 crate::event_loop::Interest::Readable,
-                polling::PollMode::Edge,
+                // polling::PollMode::Edge,
                 super::Event::Device(key),
             )?;
 
