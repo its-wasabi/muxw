@@ -42,7 +42,7 @@ impl Compositor {
 
     pub fn run(mut self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
-            self.event_loop.dispatch(&mut self.triggered_events)?;
+            self.event_loop.dispatch(&mut self.triggered_events);
 
             for token in self.triggered_events.drain(..) {
                 let _span_guard = tracing::debug_span!("event", ?token).entered();
@@ -86,7 +86,7 @@ impl Compositor {
                             } = kind
                                 && keycode == u32::from(esc)
                             {
-                                self.event_loop.emiter().emit(crate::token::Token::Exit);
+                                self.event_loop.emitter().emit(crate::token::Token::Exit);
                             }
                         }
                     },
@@ -103,7 +103,7 @@ impl Compositor {
                     crate::token::Token::Config(command) => {
                         tracing::debug!(?command, "Config command received");
                         eprintln!("Apply config logic here");
-                        self.event_loop.emiter().emit(crate::token::Token::Exit);
+                        self.event_loop.emitter().emit(crate::token::Token::Exit);
                     }
 
                     crate::token::Token::Exit => {

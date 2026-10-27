@@ -1,5 +1,5 @@
 pub struct Client {
-    pub event_sender: crate::event_loop::EventSender<crate::token::Token>,
+    pub event_sender: crate::event_loop::Sender<crate::token::Token>,
 }
 
 impl wayland_server::backend::ClientData for Client {

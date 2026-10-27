@@ -11,14 +11,15 @@ impl Seat {
     pub fn new(
         event_loop: &mut crate::event_loop::EventLoop,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let emitter = event_loop.emiter();
+        let emitter = event_loop.emitter();
         let mut seat = libseat::Seat::open(move |_, seat_event| match seat_event {
             libseat::SeatEvent::Enable => emitter.emit(SeatEvent::Enable),
             libseat::SeatEvent::Disable => emitter.emit(SeatEvent::Disable),
         })?;
 
-        event_loop.register_source(
+        event_loop.register_io(
             &seat.get_fd()?,
+            crate::event_loop::Interest::Readable,
             polling::PollMode::Edge,
             SeatEvent::Dispatch,
         )?;
@@ -104,7 +105,7 @@ impl Seat {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SeatEvent {
     Dispatch,
     Enable,

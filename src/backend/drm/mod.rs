@@ -5,6 +5,8 @@ mod device;
 
 use std::os::fd::AsFd;
 
+use crate::event_loop;
+
 const DEVICES_DEFAULT_CAPACITY: usize = 1;
 const OUTPUTS_DEFAULT_CAPACITY: usize = 1;
 
@@ -26,7 +28,13 @@ impl Drm {
         let monitor = udev::MonitorBuilder::new()?
             .match_subsystem_devtype("drm", "drm_minor")?
             .listen()?;
-        event_loop.register_source(&monitor.as_fd(), polling::PollMode::Edge, Event::Udev)?;
+
+        event_loop.register_io(
+            &monitor,
+            crate::event_loop::Interest::Readable,
+            polling::PollMode::Edge,
+            Event::Udev,
+        );
 
         let mut drm = Self {
             monitor,
@@ -271,7 +279,7 @@ pub enum Event {
 //             surfaces: Vec::new(),
 //         };
 //
-//         // NOTE: card.devnum <- The thing you should match agains with the vulkan device
+//         // NOTE: card.devnum <- The thing you should match against - with the vulkan device
 //
 //         card.set_atomic_universal_planes(true)?;
 //         Ok(card)

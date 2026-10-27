@@ -5,9 +5,7 @@ const MAX_PRIMARY_MINOR: u32 = 64;
 pub(super) struct Device {
     file: std::fs::File,
     devnum: u64,
-
-    io_key: crate::event_loop::IoKey,
-
+    handle: crate::event_loop::IoHandle<crate::token::Token>,
     outputs: Vec<super::OutputKey>,
 }
 
@@ -33,8 +31,9 @@ impl Device {
             .open(devnode)?;
 
         Ok(Some(device_list.try_insert_with_key(|key| {
-            let io_key = event_loop.register_source(
-                &file.as_fd(),
+            let handle = event_loop.register_io(
+                &file,
+                crate::event_loop::Interest::Readable,
                 polling::PollMode::Edge,
                 super::Event::Device(key),
             )?;
@@ -42,7 +41,7 @@ impl Device {
             Ok::<Self, Box<dyn std::error::Error>>(Self {
                 file,
                 devnum,
-                io_key,
+                handle,
                 outputs: Vec::new(),
             })
         })?))

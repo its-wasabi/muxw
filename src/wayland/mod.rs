@@ -34,11 +34,17 @@ impl Wayland {
         };
 
         event_loop
-            .register_source(&socket.as_fd(), polling::PollMode::Edge, Event::Socket)
+            .register_io(
+                &socket.as_fd(),
+                crate::event_loop::Interest::Readable,
+                polling::PollMode::Edge,
+                Event::Socket,
+            )
             .map_err(error::Error::RegisterSocket)?;
         event_loop
-            .register_source(
+            .register_io(
                 &display.backend().poll_fd().as_fd(),
+                crate::event_loop::Interest::Readable,
                 polling::PollMode::Edge,
                 Event::Display,
             )
