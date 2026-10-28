@@ -3,6 +3,7 @@ const DEFAULT_DEVICES_CAPACITY: usize = 12;
 struct Inner {
     seat: libseat::Seat,
     devices: std::collections::HashMap<std::os::unix::io::RawFd, libseat::Device>,
+    handle: crate::event_loop::IoHandle<crate::token::Token>,
 }
 
 pub struct Seat(std::rc::Rc<std::cell::RefCell<Inner>>);
@@ -17,7 +18,7 @@ impl Seat {
             libseat::SeatEvent::Disable => emitter.emit(SeatEvent::Disable),
         })?;
 
-        event_loop.register_fd(
+        let handle = event_loop.register_fd(
             &seat.get_fd()?,
             crate::event_loop::Interest::Readable,
             // polling::PollMode::Edge,
@@ -27,6 +28,7 @@ impl Seat {
         let inner = Inner {
             seat,
             devices: std::collections::HashMap::with_capacity(DEFAULT_DEVICES_CAPACITY),
+            handle,
         };
 
         Ok(Self(std::rc::Rc::new(std::cell::RefCell::new(inner))))

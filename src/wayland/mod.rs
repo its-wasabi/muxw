@@ -8,6 +8,9 @@ pub struct Wayland {
     display: wayland_server::Display<state::State>,
     socket: wayland_server::ListeningSocket,
     state: state::State,
+
+    socket_handle: crate::event_loop::IoHandle<crate::token::Token>,
+    display_handle: crate::event_loop::IoHandle<crate::token::Token>,
 }
 
 impl Wayland {
@@ -33,7 +36,7 @@ impl Wayland {
                 .map_err(|source| error::Error::BindAutoSocket(Box::new(source)))?,
         };
 
-        event_loop
+        let socket_handle = event_loop
             .register_fd(
                 &socket.as_fd(),
                 crate::event_loop::Interest::Readable,
@@ -41,7 +44,7 @@ impl Wayland {
                 Event::Socket,
             )
             .map_err(error::Error::RegisterSocket)?;
-        event_loop
+        let display_handle = event_loop
             .register_fd(
                 &display.backend().poll_fd().as_fd(),
                 crate::event_loop::Interest::Readable,
@@ -54,6 +57,9 @@ impl Wayland {
             display,
             socket,
             state: state::State::new(event_loop),
+
+            socket_handle,
+            display_handle,
         })
     }
 

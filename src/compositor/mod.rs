@@ -42,7 +42,7 @@ impl Compositor {
 
     pub fn run(mut self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
-            self.event_loop.dispatch(&mut self.triggered_events);
+            self.event_loop.dispatch(&mut self.triggered_events)?;
 
             for token in self.triggered_events.drain(..) {
                 let _span_guard = tracing::debug_span!("event", ?token).entered();

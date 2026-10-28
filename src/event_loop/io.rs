@@ -48,6 +48,7 @@ impl<T> Sources<T> {
     }
 }
 
+#[must_use = "dropping a Handle immediately cancels the source"]
 pub struct Handle<T> {
     raw_fd: std::os::fd::RawFd,
     io_key: IoKey,
@@ -66,7 +67,6 @@ impl<T> Handle<T> {
     }
 }
 
-// FIX: Some systems break after implementing that fix that
 impl<T> Drop for Handle<T> {
     fn drop(&mut self) {
         self.cancel();
@@ -105,6 +105,10 @@ impl<T: Clone> super::EventLoop<T> {
     }
 
     pub(super) fn drain_ready_io_into(&self, triggered: &mut Vec<T>) {
+        if self.events.is_empty() {
+            return;
+        }
+
         let tokens = self.sources.tokens.borrow();
         triggered.reserve(self.events.len());
         triggered.extend(

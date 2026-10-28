@@ -1,22 +1,22 @@
+// TODO: Clean that up
+
+const DEFAULT_CAPACITY: usize = 16;
+
 slotmap::new_key_type! {
     struct TimerKey;
 }
 
 pub enum TimerMode {
-    /// Fire once at given time
     Exact(std::time::Instant),
-    /// Fire once after given time
     Delay(std::time::Duration),
-    /// Fire rapidly every given time
     Rapid(std::time::Duration),
 }
 
 impl TimerMode {
     fn deadline(&self, now: std::time::Instant) -> std::time::Instant {
-        match self {
-            TimerMode::Exact(instant) => *instant,
-            TimerMode::Delay(duration) => now + *duration,
-            TimerMode::Rapid(duration) => now + *duration,
+        match *self {
+            Self::Exact(instant) => instant,
+            Self::Delay(duration) | Self::Rapid(duration) => now + duration,
         }
     }
 }
@@ -28,6 +28,7 @@ struct Deadline {
 }
 
 impl Deadline {
+    #[inline]
     fn is_expired(&self, now: std::time::Instant) -> bool {
         self.at <= now
     }
@@ -38,12 +39,6 @@ struct Entry<T> {
     token: T,
 }
 
-impl<T> Entry<T> {
-    fn new(mode: TimerMode, token: T) -> Self {
-        Self { mode, token }
-    }
-}
-
 pub(super) struct Timers<T> {
     deadlines: std::collections::BinaryHeap<std::cmp::Reverse<Deadline>>,
     registry: std::rc::Rc<std::cell::RefCell<slotmap::SlotMap<TimerKey, Entry<T>>>>,
@@ -51,19 +46,29 @@ pub(super) struct Timers<T> {
 
 impl<T> Timers<T> {
     pub(super) fn new() -> Self {
+        let map = slotmap::SlotMap::with_capacity_and_key(DEFAULT_CAPACITY);
+        let registry = std::cell::RefCell::new(map);
         Self {
             deadlines: std::collections::BinaryHeap::new(),
-            registry: std::rc::Rc::new(std::cell::RefCell::new(slotmap::SlotMap::with_key())),
+            registry: std::rc::Rc::new(registry),
         }
     }
 
-    pub(super) fn timeout(&self) -> Option<std::time::Duration> {
+    pub(super) fn timeout(&mut self) -> Option<std::time::Duration> {
+        if self.deadlines.is_empty() {
+            return None;
+        }
+
         let registry = self.registry.borrow();
         while let Some(&std::cmp::Reverse(deadline)) = self.deadlines.peek() {
             if registry.contains_key(deadline.key) {
                 let now = std::time::Instant::now();
                 return Some(deadline.at.saturating_duration_since(now));
             }
+
+            // TODO: Make that work with entry to binary_heap rather than not logically connected
+            // data
+            self.deadlines.pop();
         }
 
         None
@@ -99,7 +104,8 @@ impl<T> Drop for Handle<T> {
 
 impl<T: Clone> super::EventLoop<T> {
     pub fn register_timer(&mut self, mode: TimerMode, token: impl Into<T>) -> Handle<T> {
-        let entry = Entry::new(mode, token.into());
+        let token = token.into();
+        let entry = Entry { mode, token };
         let key = self.timers.register(entry);
 
         Handle {
@@ -130,9 +136,10 @@ impl<T: Clone> super::EventLoop<T> {
             triggered.push(entry.token.clone());
 
             if let TimerMode::Rapid(period) = entry.mode {
-                top.0.at = now + period;
-                while top.0.at < now {
-                    top.0.at += period;
+                let step = period.max(std::time::Duration::from_nanos(1));
+                top.0.at += step;
+                if top.0.at <= now {
+                    top.0.at = now + step;
                 }
             } else {
                 std::collections::binary_heap::PeekMut::pop(top);
