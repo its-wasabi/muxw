@@ -1,9 +1,10 @@
 const DEFAULT_DEVICES_CAPACITY: usize = 12;
 
 struct Inner {
+    handle: crate::event_loop::IoHandle<crate::token::Token>,
+
     seat: libseat::Seat,
     devices: std::collections::HashMap<std::os::unix::io::RawFd, libseat::Device>,
-    handle: crate::event_loop::IoHandle<crate::token::Token>,
 }
 
 pub struct Seat(std::rc::Rc<std::cell::RefCell<Inner>>);

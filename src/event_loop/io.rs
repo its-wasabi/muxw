@@ -4,10 +4,10 @@ slotmap::new_key_type! {
     struct IoKey;
 }
 
-impl Into<usize> for IoKey {
-    #[inline]
-    fn into(self) -> usize {
-        self.0.as_ffi() as usize
+impl TryFrom<IoKey> for usize {
+    type Error = std::num::TryFromIntError;
+    fn try_from(value: IoKey) -> Result<Self, Self::Error> {
+        usize::try_from(value.0.as_ffi())
     }
 }
 
@@ -18,6 +18,7 @@ impl From<usize> for IoKey {
     }
 }
 
+#[derive(Clone, Copy)]
 pub enum Interest {
     Readable,
     Writable,
@@ -59,10 +60,10 @@ impl<T> Handle<T> {
     fn cancel(&self) {
         self.sources.remove(self.io_key);
         let fd = unsafe { std::os::fd::BorrowedFd::borrow_raw(self.raw_fd) };
-        if let Err(error) = self.sources.poller.delete(fd) {
-            if error.kind() != std::io::ErrorKind::NotFound {
-                tracing::error!(?error, "failed to delete io source from poller");
-            }
+        if let Err(error) = self.sources.poller.delete(fd)
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            tracing::error!(?error, "failed to delete io source from poller");
         }
     }
 }
@@ -85,10 +86,14 @@ impl<T: Clone> super::EventLoop<T> {
 
         let mode = polling::PollMode::Edge;
         let io_key: IoKey = self.sources.insert(token.into());
+        let raw_key: usize = io_key
+            .try_into()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+
         let interest = match interest {
-            Interest::Readable => polling::Event::readable(io_key.into()),
-            Interest::Writable => polling::Event::writable(io_key.into()),
-            Interest::Both => polling::Event::all(io_key.into()),
+            Interest::Readable => polling::Event::readable(raw_key),
+            Interest::Writable => polling::Event::writable(raw_key),
+            Interest::Both => polling::Event::all(raw_key),
         };
 
         if let Err(error) = unsafe { self.poller.add_with_mode(source, interest, mode) } {

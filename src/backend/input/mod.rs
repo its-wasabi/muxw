@@ -5,11 +5,11 @@ use input::event::{EventTrait, keyboard::KeyboardEventTrait, pointer::PointerScr
 mod xkb_manager;
 
 pub struct Input {
+    handle: crate::event_loop::IoHandle<crate::token::Token>,
     libinput: input::Libinput,
     devices: slab::Slab<input::Device>,
     device_keys: std::collections::HashMap<input::Device, DeviceKey>,
     emitter: crate::event_loop::Emitter<crate::token::Token>,
-    handle: crate::event_loop::IoHandle<crate::token::Token>,
 }
 
 impl Input {
@@ -64,6 +64,7 @@ impl Input {
                 }
 
                 input::Event::Keyboard(keyboard_event) => {
+                    tracing::trace!("KEY PRESS FIRST POINT {:?}", std::time::Instant::now());
                     let device = keyboard_event.device();
                     if let Some(key) = self.device_keys.get(&device) {
                         self.emitter.emit(InputEvent::Device {

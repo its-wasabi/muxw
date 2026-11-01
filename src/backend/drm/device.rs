@@ -3,9 +3,10 @@ use std::os::fd::AsFd;
 const MAX_PRIMARY_MINOR: u32 = 64;
 
 pub(super) struct Device {
+    handle: crate::event_loop::IoHandle<crate::token::Token>,
+
     file: std::fs::File,
     devnum: u64,
-    handle: crate::event_loop::IoHandle<crate::token::Token>,
     outputs: Vec<super::OutputKey>,
 }
 

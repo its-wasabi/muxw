@@ -1,4 +1,4 @@
-// TODO: Clean that up
+#![allow(unused)]
 
 const DEFAULT_CAPACITY: usize = 16;
 
@@ -6,6 +6,7 @@ slotmap::new_key_type! {
     struct TimerKey;
 }
 
+#[derive(Clone, Copy)]
 pub enum TimerMode {
     Exact(std::time::Instant),
     Delay(std::time::Duration),
@@ -13,6 +14,7 @@ pub enum TimerMode {
 }
 
 impl TimerMode {
+    /// Returns when timer will expire
     fn deadline(&self, now: std::time::Instant) -> std::time::Instant {
         match *self {
             Self::Exact(instant) => instant,
@@ -29,8 +31,25 @@ struct Deadline {
 
 impl Deadline {
     #[inline]
+    fn new(key: TimerKey, mode: TimerMode) -> Self {
+        let now = std::time::Instant::now();
+        Self {
+            at: mode.deadline(now),
+            key,
+        }
+    }
+
+    #[inline]
     fn is_expired(&self, now: std::time::Instant) -> bool {
         self.at <= now
+    }
+
+    fn reschedule(&mut self, period: std::time::Duration) {
+        let now = std::time::Instant::now();
+        let step = period.max(std::time::Duration::from_nanos(1));
+        if self.at <= now {
+            self.at = now + step;
+        }
     }
 }
 
@@ -75,10 +94,9 @@ impl<T> Timers<T> {
     }
 
     fn register(&mut self, entry: Entry<T>) -> TimerKey {
-        let now = std::time::Instant::now();
-        let at = entry.mode.deadline(now);
+        let mode = entry.mode;
         let key = self.registry.borrow_mut().insert(entry);
-        let deadline = Deadline { at, key };
+        let deadline = Deadline::new(key, mode);
         self.deadlines.push(std::cmp::Reverse(deadline));
         key
     }
@@ -120,29 +138,27 @@ impl<T: Clone> super::EventLoop<T> {
         }
 
         let now = std::time::Instant::now();
-        let registry = self.timers.registry.borrow_mut();
+        let mut registry = self.timers.registry.borrow_mut();
 
-        while let Some(mut top) = self.timers.deadlines.peek_mut() {
-            let std::cmp::Reverse(deadline) = *top;
+        while let Some(mut top_deadline) = self.timers.deadlines.peek_mut() {
+            let std::cmp::Reverse(deadline) = *top_deadline;
+
             if !deadline.is_expired(now) {
                 break;
             }
 
             let Some(entry) = registry.get(deadline.key) else {
-                std::collections::binary_heap::PeekMut::pop(top);
+                std::collections::binary_heap::PeekMut::pop(top_deadline);
                 continue;
             };
 
             triggered.push(entry.token.clone());
 
             if let TimerMode::Rapid(period) = entry.mode {
-                let step = period.max(std::time::Duration::from_nanos(1));
-                top.0.at += step;
-                if top.0.at <= now {
-                    top.0.at = now + step;
-                }
+                top_deadline.0.reschedule(period);
             } else {
-                std::collections::binary_heap::PeekMut::pop(top);
+                std::collections::binary_heap::PeekMut::pop(top_deadline);
+                registry.remove(deadline.key);
             }
         }
     }

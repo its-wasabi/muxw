@@ -9,6 +9,8 @@ pub struct Compositor {
     drm: crate::backend::drm::Drm,
 
     wayland: crate::wayland::Wayland,
+
+    x: crate::event_loop::TimerHandle<crate::token::Token>,
 }
 
 impl Compositor {
@@ -26,6 +28,11 @@ impl Compositor {
 
         let wayland_server = crate::wayland::Wayland::new(context, &mut event_loop)?;
 
+        let x = event_loop.register_timer(
+            crate::event_loop::TimerMode::Delay(std::time::Duration::from_secs(5)),
+            crate::token::Token::Exit,
+        );
+
         Ok(Self {
             event_loop,
             triggered_events,
@@ -37,6 +44,8 @@ impl Compositor {
             drm: drm_manager,
 
             wayland: wayland_server,
+
+            x,
         })
     }
 
@@ -107,6 +116,7 @@ impl Compositor {
                     }
 
                     crate::token::Token::Exit => {
+                        tracing::trace!("THE EXIT {:?}", std::time::Instant::now());
                         tracing::debug!("Exiting");
 
                         if let Err(error) = self.seat.disable() {

@@ -16,10 +16,11 @@ slotmap::new_key_type! {
 }
 
 pub struct Drm {
+    handle: crate::event_loop::IoHandle<crate::token::Token>,
+
     monitor: udev::MonitorSocket,
     devices: slotmap::SlotMap<DeviceKey, device::Device>,
     outputs: slotmap::SlotMap<OutputKey, device::Output>,
-    handle: crate::event_loop::IoHandle<crate::token::Token>,
 }
 
 impl Drm {

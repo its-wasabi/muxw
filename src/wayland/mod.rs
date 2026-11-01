@@ -5,12 +5,13 @@ pub mod error;
 mod state;
 
 pub struct Wayland {
+    socket_handle: crate::event_loop::IoHandle<crate::token::Token>,
+    display_handle: crate::event_loop::IoHandle<crate::token::Token>,
+
     display: wayland_server::Display<state::State>,
     socket: wayland_server::ListeningSocket,
     state: state::State,
 
-    socket_handle: crate::event_loop::IoHandle<crate::token::Token>,
-    display_handle: crate::event_loop::IoHandle<crate::token::Token>,
 }
 
 impl Wayland {
