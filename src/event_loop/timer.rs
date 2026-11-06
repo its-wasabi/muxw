@@ -44,12 +44,11 @@ impl Deadline {
         self.at <= now
     }
 
-    fn reschedule(&mut self, period: std::time::Duration) {
-        let now = std::time::Instant::now();
+    #[inline]
+    fn reschedule(&mut self, now: std::time::Instant, period: std::time::Duration) {
         let step = period.max(std::time::Duration::from_nanos(1));
-        if self.at <= now {
-            self.at = now + step;
-        }
+        let next = self.at + step;
+        self.at = if next > now { next } else { now + step };
     }
 }
 
@@ -155,7 +154,7 @@ impl<T: Clone> super::EventLoop<T> {
             triggered.push(entry.token.clone());
 
             if let TimerMode::Rapid(period) = entry.mode {
-                top_deadline.0.reschedule(period);
+                top_deadline.0.reschedule(now, period);
             } else {
                 std::collections::binary_heap::PeekMut::pop(top_deadline);
                 registry.remove(deadline.key);

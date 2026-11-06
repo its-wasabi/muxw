@@ -10,7 +10,7 @@ mod timer;
 pub use timer::Handle as TimerHandle;
 pub use timer::TimerMode;
 
-pub struct EventLoop<T: Clone = crate::token::Token> {
+pub struct EventLoop<T: Clone> {
     poller: std::sync::Arc<polling::Poller>,
     events: polling::Events,
 

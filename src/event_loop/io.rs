@@ -4,10 +4,14 @@ slotmap::new_key_type! {
     struct IoKey;
 }
 
-impl TryFrom<IoKey> for usize {
-    type Error = std::num::TryFromIntError;
-    fn try_from(value: IoKey) -> Result<Self, Self::Error> {
-        usize::try_from(value.0.as_ffi())
+impl From<IoKey> for usize {
+    #[inline]
+    fn from(value: IoKey) -> Self {
+        const _: () = assert!(
+            std::mem::size_of::<usize>() >= std::mem::size_of::<u64>(),
+            "IoKey packing requires a 64-bit usize target"
+        );
+        value.0.as_ffi() as usize
     }
 }
 
@@ -86,10 +90,7 @@ impl<T: Clone> super::EventLoop<T> {
 
         let mode = polling::PollMode::Edge;
         let io_key: IoKey = self.sources.insert(token.into());
-        let raw_key: usize = io_key
-            .try_into()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
-
+        let raw_key: usize = io_key.into();
         let interest = match interest {
             Interest::Readable => polling::Event::readable(raw_key),
             Interest::Writable => polling::Event::writable(raw_key),

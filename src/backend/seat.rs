@@ -11,7 +11,7 @@ pub struct Seat(std::rc::Rc<std::cell::RefCell<Inner>>);
 
 impl Seat {
     pub fn new(
-        event_loop: &mut crate::event_loop::EventLoop,
+        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let emitter = event_loop.emitter();
         let mut seat = libseat::Seat::open(move |_, seat_event| match seat_event {

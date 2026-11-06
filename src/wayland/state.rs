@@ -1,7 +1,7 @@
 pub struct State {}
 
 impl State {
-    pub fn new(_event_loop: &mut crate::event_loop::EventLoop) -> Self {
+    pub fn new(_event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>) -> Self {
         Self {}
     }
 }

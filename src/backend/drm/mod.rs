@@ -25,7 +25,7 @@ pub struct Drm {
 
 impl Drm {
     pub fn new(
-        event_loop: &mut crate::event_loop::EventLoop,
+        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let monitor = udev::MonitorBuilder::new()?
             .match_subsystem_devtype("drm", "drm_minor")?
@@ -58,7 +58,7 @@ impl Drm {
 
     pub fn dispatch(
         &mut self,
-        event_loop: &mut crate::event_loop::EventLoop,
+        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
         event: Event,
     ) -> Result<(), Box<dyn std::error::Error>> {
         match event {
@@ -74,7 +74,7 @@ impl Drm {
 
     fn handle_udev(
         &mut self,
-        event_loop: &mut crate::event_loop::EventLoop,
+        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let events = self.monitor.iter().collect::<Vec<_>>();
         for event in events {
@@ -97,7 +97,7 @@ impl Drm {
 
     fn add_device(
         &mut self,
-        event_loop: &mut crate::event_loop::EventLoop,
+        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
         device: &udev::Device,
     ) -> Result<Option<DeviceKey>, Box<dyn std::error::Error>> {
         let Some(key) = device::Device::register_self(event_loop, &mut self.devices, device)?

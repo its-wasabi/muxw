@@ -11,13 +11,12 @@ pub struct Wayland {
     display: wayland_server::Display<state::State>,
     socket: wayland_server::ListeningSocket,
     state: state::State,
-
 }
 
 impl Wayland {
     pub fn new(
         context: &crate::context::Context,
-        event_loop: &mut crate::event_loop::EventLoop,
+        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<Self, error::Error> {
         let mut display = wayland_server::Display::new().map_err(error::Error::CreateDisplay)?;
         display.handle().create_global::<
@@ -67,7 +66,7 @@ impl Wayland {
     pub fn dispatch(
         &mut self,
         event: Event,
-        event_loop: &crate::event_loop::EventLoop,
+        event_loop: &crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<(), error::Error> {
         match event {
             Event::Socket => self.accept_clients(event_loop),
@@ -81,7 +80,7 @@ impl Wayland {
 
     fn accept_clients(
         &self,
-        event_loop: &crate::event_loop::EventLoop,
+        event_loop: &crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<(), error::Error> {
         // The socket is registered edge-triggered, so every pending connection
         // has to be drained now: no further wakeup comes for ones left queued.

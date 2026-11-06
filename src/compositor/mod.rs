@@ -1,5 +1,5 @@
 pub struct Compositor {
-    event_loop: crate::event_loop::EventLoop,
+    event_loop: crate::event_loop::EventLoop<crate::token::Token>,
     triggered_events: Vec<crate::token::Token>,
     config: crate::config::Handle,
 

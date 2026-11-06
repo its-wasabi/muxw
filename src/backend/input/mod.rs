@@ -14,7 +14,7 @@ pub struct Input {
 
 impl Input {
     pub fn new(
-        event_loop: &mut crate::event_loop::EventLoop,
+        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
         seat_handle: crate::backend::seat::SeatHandle,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut libinput = input::Libinput::new_with_udev(LibinputInterface { seat_handle });
@@ -155,7 +155,6 @@ impl input::LibinputInterface for LibinputInterface {
         path: &std::path::Path,
         _flags: i32,
     ) -> std::result::Result<std::os::fd::OwnedFd, i32> {
-        tracing::info!("OPEN DEVICE");
         self.seat_handle.open_device(path).map_err(|error| {
             error.raw_os_error().unwrap_or_else(|| {
                 tracing::warn!(

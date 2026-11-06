@@ -13,7 +13,7 @@ pub(super) struct Device {
 impl Device {
     // TODO: Replace all None with correct errors
     pub(super) fn register_self(
-        event_loop: &mut crate::event_loop::EventLoop,
+        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
         device_list: &mut slotmap::SlotMap<super::DeviceKey, Self>,
         device: &udev::Device,
     ) -> Result<Option<super::DeviceKey>, Box<dyn std::error::Error>> {
