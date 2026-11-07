@@ -14,11 +14,19 @@ pub enum TimerMode {
 }
 
 impl TimerMode {
-    /// Returns when timer will expire
+    #[inline]
     fn deadline(&self, now: std::time::Instant) -> std::time::Instant {
         match *self {
             Self::Exact(instant) => instant,
             Self::Delay(duration) | Self::Rapid(duration) => now + duration,
+        }
+    }
+
+    #[inline]
+    fn period(self) -> Option<std::time::Duration> {
+        match self {
+            Self::Exact(_) | Self::Delay(_) => None,
+            Self::Rapid(d) => Some(d.max(std::time::Duration::from_nanos(1))),
         }
     }
 }
@@ -53,7 +61,7 @@ impl Deadline {
 }
 
 struct Entry<T> {
-    mode: TimerMode,
+    period: Option<std::time::Duration>,
     token: T,
 }
 
@@ -84,17 +92,26 @@ impl<T> Timers<T> {
                 return Some(deadline.at.saturating_duration_since(now));
             }
 
-            // TODO: Make that work with entry to binary_heap rather than not logically connected
-            // data
             self.deadlines.pop();
         }
 
         None
     }
 
-    fn register(&mut self, entry: Entry<T>) -> TimerKey {
-        let mode = entry.mode;
-        let key = self.registry.borrow_mut().insert(entry);
+    fn register(&mut self, mode: TimerMode, token: T) -> TimerKey {
+        let entry = Entry {
+            period: mode.period(),
+            token,
+        };
+
+        let mut registry = self.registry.borrow_mut();
+        let key = registry.insert(entry);
+
+        // if self.deadlines.len() > registry.len() * 2 + DEFAULT_CAPACITY {
+        //     self.deadlines
+        //         .retain(|std::cmp::Reverse(d)| registry.contains_key(d.key));
+        // }
+
         let deadline = Deadline::new(key, mode);
         self.deadlines.push(std::cmp::Reverse(deadline));
         key
@@ -122,8 +139,7 @@ impl<T> Drop for Handle<T> {
 impl<T: Clone> super::EventLoop<T> {
     pub fn register_timer(&mut self, mode: TimerMode, token: impl Into<T>) -> Handle<T> {
         let token = token.into();
-        let entry = Entry { mode, token };
-        let key = self.timers.register(entry);
+        let key = self.timers.register(mode, token.into());
 
         Handle {
             key,
@@ -132,16 +148,15 @@ impl<T: Clone> super::EventLoop<T> {
     }
 
     pub(super) fn drain_ready_timers_into(&mut self, triggered: &mut Vec<T>) {
-        if self.timers.deadlines.is_empty() {
+        let mut registry = self.timers.registry.borrow_mut();
+        if registry.is_empty() {
             return;
         }
 
         let now = std::time::Instant::now();
-        let mut registry = self.timers.registry.borrow_mut();
 
         while let Some(mut top_deadline) = self.timers.deadlines.peek_mut() {
             let std::cmp::Reverse(deadline) = *top_deadline;
-
             if !deadline.is_expired(now) {
                 break;
             }
@@ -153,7 +168,7 @@ impl<T: Clone> super::EventLoop<T> {
 
             triggered.push(entry.token.clone());
 
-            if let TimerMode::Rapid(period) = entry.mode {
+            if let Some(period) = entry.period {
                 top_deadline.0.reschedule(now, period);
             } else {
                 std::collections::binary_heap::PeekMut::pop(top_deadline);
