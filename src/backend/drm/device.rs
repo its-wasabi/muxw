@@ -11,6 +11,10 @@ pub(super) struct Device {
 }
 
 impl Device {
+    pub(super) fn new() -> Self {
+        todo!()
+    }
+
     // TODO: Replace all None with correct errors
     pub(super) fn register_self(
         event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,

@@ -107,11 +107,6 @@ impl<T> Timers<T> {
         let mut registry = self.registry.borrow_mut();
         let key = registry.insert(entry);
 
-        // if self.deadlines.len() > registry.len() * 2 + DEFAULT_CAPACITY {
-        //     self.deadlines
-        //         .retain(|std::cmp::Reverse(d)| registry.contains_key(d.key));
-        // }
-
         let deadline = Deadline::new(key, mode);
         self.deadlines.push(std::cmp::Reverse(deadline));
         key
@@ -138,7 +133,6 @@ impl<T> Drop for Handle<T> {
 
 impl<T: Clone> super::EventLoop<T> {
     pub fn register_timer(&mut self, mode: TimerMode, token: impl Into<T>) -> Handle<T> {
-        let token = token.into();
         let key = self.timers.register(mode, token.into());
 
         Handle {

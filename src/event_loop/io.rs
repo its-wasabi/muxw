@@ -55,7 +55,7 @@ impl<T> Sources<T> {
 
 #[must_use = "dropping a Handle immediately cancels the source"]
 pub struct Handle<T> {
-    raw_fd: std::os::fd::RawFd,
+    fd: std::os::fd::OwnedFd,
     io_key: IoKey,
     sources: std::rc::Rc<Sources<T>>,
 }
@@ -63,8 +63,7 @@ pub struct Handle<T> {
 impl<T> Handle<T> {
     fn cancel(&self) {
         self.sources.remove(self.io_key);
-        let fd = unsafe { std::os::fd::BorrowedFd::borrow_raw(self.raw_fd) };
-        if let Err(error) = self.sources.poller.delete(fd)
+        if let Err(error) = self.sources.poller.delete(&self.fd)
             && error.kind() != std::io::ErrorKind::NotFound
         {
             tracing::error!(?error, "failed to delete io source from poller");
@@ -79,15 +78,13 @@ impl<T> Drop for Handle<T> {
 }
 
 impl<T: Clone> super::EventLoop<T> {
-    pub fn register_fd<S: polling::AsRawSource>(
+    pub fn register_fd<S: polling::AsRawSource + polling::AsSource>(
         &mut self,
         source: S,
         interest: Interest,
         token: impl Into<T>,
     ) -> Result<Handle<T>, std::io::Error> {
-        use std::os::fd::AsRawFd;
-        let raw_fd = source.raw().as_raw_fd();
-
+        let fd = source.as_fd().try_clone_to_owned()?;
         let mode = polling::PollMode::Edge;
         let io_key: IoKey = self.sources.insert(token.into());
         let raw_key: usize = io_key.into();
@@ -104,7 +101,7 @@ impl<T: Clone> super::EventLoop<T> {
         }
 
         Ok(Handle {
-            raw_fd,
+            fd,
             io_key,
             sources: self.sources.clone(),
         })

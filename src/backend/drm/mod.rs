@@ -2,6 +2,7 @@
 #![allow(clippy::todo)]
 
 mod device;
+pub mod error;
 
 use std::os::fd::AsFd;
 
