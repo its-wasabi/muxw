@@ -11,7 +11,7 @@ pub(super) struct Device {
 }
 
 impl Device {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(file: std::fs::File) -> Self {
         todo!()
     }
 
@@ -69,6 +69,10 @@ impl AsFd for Device {
 
 impl drm::Device for Device {}
 impl drm::control::Device for Device {}
+
+impl Drop for Device {
+    fn drop(&mut self) {}
+}
 
 pub struct Output {
     device: super::DeviceKey,

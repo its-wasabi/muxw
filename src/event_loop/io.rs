@@ -94,7 +94,7 @@ impl<T: Clone> super::EventLoop<T> {
             Interest::Both => polling::Event::all(raw_key),
         };
 
-        if let Err(error) = unsafe { self.poller.add_with_mode(source, interest, mode) } {
+        if let Err(error) = unsafe { self.poller.add_with_mode(&fd, interest, mode) } {
             self.sources.remove(io_key);
             tracing::error!(?error, "failed to add io source to poller");
             return Err(error);
