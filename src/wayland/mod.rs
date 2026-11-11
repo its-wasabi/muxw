@@ -40,7 +40,6 @@ impl Wayland {
             .register_fd(
                 &socket.as_fd(),
                 crate::event_loop::Interest::Readable,
-                // polling::PollMode::Edge,
                 Event::Socket,
             )
             .map_err(error::Error::RegisterSocket)?;
@@ -48,7 +47,6 @@ impl Wayland {
             .register_fd(
                 &display.backend().poll_fd().as_fd(),
                 crate::event_loop::Interest::Readable,
-                // polling::PollMode::Edge,
                 Event::Display,
             )
             .map_err(error::Error::RegisterDisplay)?;

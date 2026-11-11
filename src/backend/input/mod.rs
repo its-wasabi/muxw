@@ -25,7 +25,6 @@ impl Input {
         let handle = event_loop.register_fd(
             &libinput.as_fd(),
             crate::event_loop::Interest::Readable,
-            // polling::PollMode::Edge,
             InputEvent::Dispatch,
         )?;
 

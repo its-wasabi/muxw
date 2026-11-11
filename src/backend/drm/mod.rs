@@ -1,27 +1,29 @@
-#![allow(unused)]
-#![allow(clippy::todo)]
-
 mod device;
 pub mod error;
 
 use std::os::fd::AsFd;
 
-use crate::event_loop;
+use crate::{backend::drm::device::DeviceKey, event_loop};
 
 const DEVICES_DEFAULT_CAPACITY: usize = 1;
 const OUTPUTS_DEFAULT_CAPACITY: usize = 1;
 
 slotmap::new_key_type! {
     pub struct OutputKey;
-    pub struct DeviceKey;
+}
+
+struct DeviceEntry {
+    device: device::Device,
+    handle: crate::event_loop::IoHandle<crate::token::Token>,
 }
 
 pub struct Drm {
     handle: crate::event_loop::IoHandle<crate::token::Token>,
-
     monitor: udev::MonitorSocket,
-    devices: slotmap::SlotMap<DeviceKey, device::Device>,
-    outputs: slotmap::SlotMap<OutputKey, device::Output>,
+
+    outputs: slotmap::SlotMap<OutputKey, Output>,
+
+    devices: slotmap::SlotMap<device::DeviceKey, DeviceEntry>,
 }
 
 impl Drm {
@@ -32,18 +34,16 @@ impl Drm {
             .match_subsystem_devtype("drm", "drm_minor")?
             .listen()?;
 
-        let handle = event_loop.register_fd(
-            &monitor,
-            crate::event_loop::Interest::Readable,
-            // polling::PollMode::Edge,
-            Event::Udev,
-        )?;
+        let handle =
+            event_loop.register_fd(&monitor, crate::event_loop::Interest::Readable, Event::Udev)?;
 
         let mut drm = Self {
-            monitor,
-            devices: slotmap::SlotMap::with_capacity_and_key(DEVICES_DEFAULT_CAPACITY),
-            outputs: slotmap::SlotMap::with_capacity_and_key(OUTPUTS_DEFAULT_CAPACITY),
             handle,
+            monitor,
+
+            outputs: slotmap::SlotMap::with_capacity_and_key(OUTPUTS_DEFAULT_CAPACITY),
+
+            devices: slotmap::SlotMap::with_capacity_and_key(DEVICES_DEFAULT_CAPACITY),
         };
 
         let mut enumerator = udev::Enumerator::new()?;
@@ -64,7 +64,9 @@ impl Drm {
     ) -> Result<(), Box<dyn std::error::Error>> {
         match event {
             // Event::Frame => todo!(),
-            // Event::Udev => self.handle_udev(event_loop),
+            Event::Udev => {
+                self.handle_udev(event_loop);
+            }
             // Event::Device(device_key) => todo!(),
             // Event::Output(output_key) => todo!(),
             _ => (),
@@ -83,7 +85,9 @@ impl Drm {
                 udev::EventType::Add => {
                     self.add_device(event_loop, &event.device());
                 }
-                udev::EventType::Remove => self.remove_device(),
+                udev::EventType::Remove => {
+                    self.remove_device(todo!());
+                }
                 // udev::EventType::Change => todo!("Todo Handle DRM Change Event"),
                 //
                 // udev::EventType::Bind => todo!("Handle DRM Device Bind Event"),
@@ -100,42 +104,58 @@ impl Drm {
         &mut self,
         event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
         device: &udev::Device,
-    ) -> Result<Option<DeviceKey>, Box<dyn std::error::Error>> {
-        let Some(key) = device::Device::register_self(event_loop, &mut self.devices, device)?
-        else {
-            // return todo!("Create some not a card error");
-            return Ok(None);
-        };
+    ) -> Result<device::DeviceKey, error::Error> {
+        self.devices.try_insert_with_key(|key| {
+            let device = device::Device::new(device)?;
+            let handle = event_loop.register_fd(
+                &device.file,
+                crate::event_loop::Interest::Readable,
+                Event::Device(key),
+            )?;
 
-        Ok(Some(key))
+            Ok(DeviceEntry { device, handle })
+        })
     }
 
-    fn remove_device(&mut self) {
-        todo!("Remomve Device and Outputs from slotmap")
+    fn remove_device(&mut self, device: &udev::Device) -> Result<(), error::Error> {
+        let devnum = device.devnum().ok_or(error::Error::NotPrimaryCard)?;
+
+        if let Some(key) = self
+            .devices
+            .iter()
+            .find_map(|(key, entry)| (entry.device.devnum == devnum).then_some(key))
+        {
+            if let Some(entry) = self.devices.remove(key) {
+                // remove outputs
+            };
+        }
+        Ok(())
     }
 
     pub fn drop_master(&self) -> std::io::Result<()> {
-        for (_, device) in &self.devices {
-            device.release_master()?;
+        for (_, entry) in &self.devices {
+            entry.device.release_master()?;
         }
 
         Ok(())
     }
 }
 
+pub struct Output {
+    device: device::DeviceKey,
+
+    connector: drm::control::connector::Handle,
+    crtc: drm::control::crtc::Handle,
+    mode: drm::control::Mode,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
     Frame,
     Udev,
-    Device(DeviceKey),
+    Device(device::DeviceKey),
     Output(OutputKey),
 }
-
-// TODO: Hold event_loop key to deregister event source when removing device
-// TODO: Also error handling here is non-existent if device cant be opened instead of
-// compositor crash it should be simply ignored
-// TODO: Try to make Device have Drop trait implemented that will automatically de-register that
-// from event loop.
 
 //     pub fn resume(&mut self) -> Result<(), Box<dyn std::error::Error>> {
 //         self.active = true;

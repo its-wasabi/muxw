@@ -1,33 +1,27 @@
 use std::os::fd::AsFd;
 
+const DRM_MAJOR: u32 = 226;
 const MAX_PRIMARY_MINOR: u32 = 64;
 
-pub(super) struct Device {
-    handle: crate::event_loop::IoHandle<crate::token::Token>,
+slotmap::new_key_type! {
+    pub struct DeviceKey;
+}
 
-    file: std::fs::File,
-    devnum: u64,
+pub(super) struct Device {
+    pub(super) file: std::fs::File,
+    pub(super) devnum: u64,
+
     outputs: Vec<super::OutputKey>,
 }
 
 impl Device {
-    pub(super) fn new(file: std::fs::File) -> Self {
-        todo!()
-    }
-
-    // TODO: Replace all None with correct errors
-    pub(super) fn register_self(
-        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
-        device_list: &mut slotmap::SlotMap<super::DeviceKey, Self>,
-        device: &udev::Device,
-    ) -> Result<Option<super::DeviceKey>, Box<dyn std::error::Error>> {
+    pub(super) fn new(device: &udev::Device) -> Result<Self, super::error::Error> {
         let (Some(devnum), Some(devnode)) = (device.devnum(), device.devnode()) else {
-            return Ok(None);
+            return Err(super::error::Error::NotPrimaryCard);
         };
 
-        // Ignore `renderer` files
-        if rustix::fs::minor(devnum) < MAX_PRIMARY_MINOR {
-            return Ok(None);
+        if !Self::is_primary_card(devnum) {
+            return Err(super::error::Error::NotPrimaryCard);
         }
 
         let file = std::fs::OpenOptions::new()
@@ -35,29 +29,21 @@ impl Device {
             .write(true)
             .open(devnode)?;
 
-        Ok(Some(device_list.try_insert_with_key(|key| {
-            let handle = event_loop.register_fd(
-                &file,
-                crate::event_loop::Interest::Readable,
-                // polling::PollMode::Edge,
-                super::Event::Device(key),
-            )?;
-
-            Ok::<Self, Box<dyn std::error::Error>>(Self {
-                file,
-                devnum,
-                handle,
-                outputs: Vec::new(),
-            })
-        })?))
+        Ok(Self {
+            file,
+            devnum,
+            outputs: Vec::new(),
+        })
     }
 
+    #[inline]
     pub(super) fn release_master(&self) -> std::io::Result<()> {
         drm::Device::release_master_lock(self)
     }
 
-    pub(super) fn query_outputs(&self) -> Vec<Output> {
-        todo!()
+    #[inline]
+    fn is_primary_card(devnum: u64) -> bool {
+        rustix::fs::major(devnum) == DRM_MAJOR && rustix::fs::minor(devnum) < MAX_PRIMARY_MINOR
     }
 }
 
@@ -71,13 +57,7 @@ impl drm::Device for Device {}
 impl drm::control::Device for Device {}
 
 impl Drop for Device {
-    fn drop(&mut self) {}
-}
-
-pub struct Output {
-    device: super::DeviceKey,
-
-    connector: drm::control::connector::Handle,
-    crtc: drm::control::crtc::Handle,
-    mode: drm::control::Mode,
+    fn drop(&mut self) {
+        // Remove outputs
+    }
 }

@@ -22,7 +22,6 @@ impl Seat {
         let handle = event_loop.register_fd(
             &seat.get_fd()?,
             crate::event_loop::Interest::Readable,
-            // polling::PollMode::Edge,
             SeatEvent::Dispatch,
         )?;
 
