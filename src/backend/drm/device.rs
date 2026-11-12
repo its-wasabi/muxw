@@ -1,3 +1,5 @@
+use drm::Device as DRMDevice;
+use drm::control::Device as DRMControlDevice;
 use std::os::fd::AsFd;
 
 const DRM_MAJOR: u32 = 226;
@@ -16,6 +18,18 @@ pub(super) struct Device {
 
 impl Device {
     pub(super) fn new(device: &udev::Device) -> Result<Self, super::error::Error> {
+        if let Some(pci) = device.parent_with_subsystem("pci")? {
+            let vendor = pci
+                .property_value("ID_VENDOR_FROM_DATABASE")
+                .and_then(|s| s.to_str());
+            let model = pci
+                .property_value("ID_MODEL_FROM_DATABASE")
+                .and_then(|s| s.to_str());
+            let is_boot_vga = pci.attribute_value("boot_vga").and_then(|s| s.to_str()) == Some("1");
+
+            tracing::info!("Drm device {vendor:?} | {model:?} | {is_boot_vga:?}");
+        }
+
         let (Some(devnum), Some(devnode)) = (device.devnum(), device.devnode()) else {
             return Err(super::error::Error::NotPrimaryCard);
         };
@@ -29,11 +43,17 @@ impl Device {
             .write(true)
             .open(devnode)?;
 
-        Ok(Self {
+        let device = Self {
             file,
             devnum,
             outputs: Vec::new(),
-        })
+        };
+
+        // TODO: map errors
+        device.set_client_capability(drm::ClientCapability::UniversalPlanes, true)?;
+        device.set_client_capability(drm::ClientCapability::Atomic, true)?;
+
+        Ok(device)
     }
 
     #[inline]
@@ -57,7 +77,5 @@ impl drm::Device for Device {}
 impl drm::control::Device for Device {}
 
 impl Drop for Device {
-    fn drop(&mut self) {
-        // Remove outputs
-    }
+    fn drop(&mut self) {}
 }

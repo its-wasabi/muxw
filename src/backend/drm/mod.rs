@@ -1,9 +1,7 @@
+#![allow(unused)]
+
 mod device;
 pub mod error;
-
-use std::os::fd::AsFd;
-
-use crate::{backend::drm::device::DeviceKey, event_loop};
 
 const DEVICES_DEFAULT_CAPACITY: usize = 1;
 const OUTPUTS_DEFAULT_CAPACITY: usize = 1;
@@ -51,7 +49,10 @@ impl Drm {
         enumerator.match_property("DEVTYPE", "drm_minor")?;
         enumerator.match_is_initialized()?;
         for udev_device in enumerator.scan_devices()? {
-            drm.add_device(event_loop, &udev_device);
+            let x = drm.add_device(event_loop, &udev_device);
+            if let Err(err) = x {
+                tracing::error!(?err, "DRM");
+            }
         }
 
         Ok(drm)
