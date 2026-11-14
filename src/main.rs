@@ -26,16 +26,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = context::Context::new()?;
     let _log_guard = context::logging::init_logging(&context.log_target)?;
 
-    #[cfg(debug_assertions)]
-    println!("{context:#?}");
-
-    let compositor = compositor::Compositor::new(&context).inspect_err(|error| {
-        tracing::error!(error);
-    })?;
-
-    compositor.run().inspect_err(|error| {
-        tracing::error!(error);
-    })?;
+    compositor::Compositor::new(&context)
+        .inspect_err(|error| {
+            tracing::error!(error);
+        })?
+        .run()
+        .inspect_err(|error| {
+            tracing::error!(error);
+        })?;
 
     Ok(())
 }

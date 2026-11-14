@@ -1,12 +1,9 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(unused)]
+
 #[path = "../src/event_loop/mod.rs"]
 #[allow(dead_code, unused_imports)]
 mod event_loop;
-
-/// Stand-in for the real token module so `EventLoop`'s default type parameter
-/// (`crate::token::Token`) resolves in this crate.
-mod token {
-    pub type Token = super::Tok;
-}
 
 use std::hint::black_box;
 use std::os::fd::OwnedFd;
@@ -16,15 +13,14 @@ use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, 
 use event_loop::{EventLoop, Interest, TimerMode};
 
 #[derive(Clone, Copy)]
-pub struct Tok([u64; 6]); // 48 bytes, like your Token
+pub struct Token([u64; 6]);
 
-fn tok(i: usize) -> Tok {
-    Tok([i as u64; 6])
+const fn token(i: usize) -> Token {
+    Token([i as u64; 6])
 }
 
 const FAR: Duration = Duration::from_secs(3600);
 
-/// fds we can open without risking EMFILE; leaves room for criterion, stdio, epoll fds.
 fn fd_budget() -> usize {
     use rustix::process::{Resource, getrlimit};
     getrlimit(Resource::Nofile)
@@ -51,7 +47,6 @@ fn config() -> Criterion {
         .measurement_time(Duration::from_secs(3))
 }
 
-/// Cost of the syscall alone; everything else is judged relative to this.
 fn floor(c: &mut Criterion) {
     let poller = polling::Poller::new().unwrap();
     let mut events = polling::Events::new();
@@ -60,53 +55,50 @@ fn floor(c: &mut Criterion) {
             events.clear();
             poller.wait(&mut events, Some(Duration::ZERO)).unwrap();
             black_box(events.len());
-        })
+        });
     });
 }
 
-/// Emit n tokens, one dispatch. State returns to empty each iteration, so one loop is reused.
 fn emit(c: &mut Criterion) {
     let mut group = c.benchmark_group("emit");
     for n in [1usize, 16, 256, 4096] {
         group.throughput(Throughput::Elements(n as u64));
-        let mut el = EventLoop::<Tok>::new().unwrap();
+        let mut el = EventLoop::<Token>::new().unwrap();
         let emitter = el.emitter();
         let mut out = Vec::new();
         group.bench_function(BenchmarkId::from_parameter(n), |b| {
             b.iter(|| {
                 for i in 0..n {
-                    emitter.emit(tok(i));
+                    emitter.emit(token(i));
                 }
                 el.dispatch(&mut out).unwrap();
                 black_box(&out);
-            })
+            });
         });
     }
     group.finish();
 }
 
-/// Mailbox path, single-threaded so it isolates the loop side.
 fn sender(c: &mut Criterion) {
     let mut group = c.benchmark_group("sender");
     for n in [1usize, 16, 256] {
         group.throughput(Throughput::Elements(n as u64));
-        let mut el = EventLoop::<Tok>::new().unwrap();
+        let mut el = EventLoop::<Token>::new().unwrap();
         let tx = el.sender();
         let mut out = Vec::new();
         group.bench_function(BenchmarkId::from_parameter(n), |b| {
             b.iter(|| {
                 for i in 0..n {
-                    tx.send(tok(i)).unwrap();
+                    tx.send(token(i)).unwrap();
                 }
                 el.dispatch(&mut out).unwrap();
                 black_box(&out);
-            })
+            });
         });
     }
     group.finish();
 }
 
-/// `ready` of `registered` sources fire. Cost should follow `ready`, not `registered`.
 fn io(c: &mut Criterion) {
     let mut group = c.benchmark_group("io");
     for (registered, ready) in [(1usize, 1usize), (8, 8), (64, 64), (512, 512), (4096, 8)] {
@@ -119,11 +111,11 @@ fn io(c: &mut Criterion) {
 
         group.throughput(Throughput::Elements(ready as u64));
         let fds = eventfds(registered);
-        let mut el = EventLoop::<Tok>::new().unwrap();
+        let mut el = EventLoop::<Token>::new().unwrap();
         let handles: Vec<_> = fds
             .iter()
             .enumerate()
-            .map(|(i, fd)| el.register_fd(fd, Interest::Readable, tok(i)).unwrap())
+            .map(|(i, fd)| el.register_fd(fd, Interest::Readable, token(i)).unwrap())
             .collect();
         let mut out = Vec::new();
 
@@ -137,11 +129,11 @@ fn io(c: &mut Criterion) {
                         black_box(&out);
                     },
                     BatchSize::PerIteration,
-                )
+                );
             },
         );
 
-        drop(handles); // handles go before the fds they point at
+        drop(handles);
     }
     group.finish();
 }
@@ -151,9 +143,7 @@ fn timers(c: &mut Criterion) {
     for n in [1usize, 64, 1024] {
         group.throughput(Throughput::Elements(n as u64));
 
-        // n expired one-shot timers fire in one dispatch. Everything is consumed each
-        // iteration, so one loop is reused; only `dispatch` is timed.
-        let mut el = EventLoop::<Tok>::new().unwrap();
+        let mut el = EventLoop::<Token>::new().unwrap();
         let mut out = Vec::new();
         group.bench_function(BenchmarkId::new("fire_oneshot", n), |b| {
             b.iter_custom(|iters| {
@@ -161,7 +151,7 @@ fn timers(c: &mut Criterion) {
                 for _ in 0..iters {
                     let at = Instant::now();
                     let handles: Vec<_> = (0..n)
-                        .map(|i| el.register_timer(TimerMode::Exact(at), tok(i)))
+                        .map(|i| el.register_timer(TimerMode::Exact(at), token(i)))
                         .collect();
 
                     let start = Instant::now();
@@ -172,45 +162,40 @@ fn timers(c: &mut Criterion) {
                     drop(handles);
                 }
                 total
-            })
+            });
         });
         drop(el);
 
-        // n rapid timers due on every dispatch: fire + reschedule
-        let mut el = EventLoop::<Tok>::new().unwrap();
+        let mut el = EventLoop::<Token>::new().unwrap();
         let handles: Vec<_> = (0..n)
-            .map(|i| el.register_timer(TimerMode::Rapid(Duration::from_nanos(1)), tok(i)))
+            .map(|i| el.register_timer(TimerMode::Rapid(Duration::from_nanos(1)), token(i)))
             .collect();
         group.bench_function(BenchmarkId::new("fire_rapid", n), |b| {
             b.iter(|| {
                 el.dispatch(&mut out).unwrap();
                 black_box(&out);
-            })
+            });
         });
         drop(handles);
         drop(el);
 
-        // register n far timers, cancel them all. Cancelled entries stay in the heap, so
-        // each iteration gets a fresh loop (one alive at a time, dropped outside timing).
         group.bench_function(BenchmarkId::new("register_cancel", n), |b| {
             b.iter_batched(
-                || EventLoop::<Tok>::new().unwrap(),
+                || EventLoop::<Token>::new().unwrap(),
                 |mut el| {
                     let handles: Vec<_> = (0..n)
-                        .map(|i| el.register_timer(TimerMode::Delay(FAR), tok(i)))
+                        .map(|i| el.register_timer(TimerMode::Delay(FAR), token(i)))
                         .collect();
                     drop(handles);
                     el
                 },
                 BatchSize::PerIteration,
-            )
+            );
         });
     }
     group.finish();
 }
 
-/// 1000 live timers; cancel one and register one, `ops` times. If time per op grows from
-/// 1_000 to 100_000 ops, stale heap entries are piling up.
 fn rearm(c: &mut Criterion) {
     let mut group = c.benchmark_group("timers_rearm");
     group.sample_size(10);
@@ -219,9 +204,9 @@ fn rearm(c: &mut Criterion) {
         group.bench_function(BenchmarkId::from_parameter(ops), |b| {
             b.iter_batched(
                 || {
-                    let mut el = EventLoop::<Tok>::new().unwrap();
+                    let mut el = EventLoop::<Token>::new().unwrap();
                     let live: Vec<_> = (0..1000)
-                        .map(|i| Some(el.register_timer(TimerMode::Delay(FAR), tok(i))))
+                        .map(|i| Some(el.register_timer(TimerMode::Delay(FAR), token(i))))
                         .collect();
                     (el, live)
                 },
@@ -229,25 +214,24 @@ fn rearm(c: &mut Criterion) {
                     for i in 0..ops {
                         let slot = i % live.len();
                         live[slot] = None; // drop cancels
-                        live[slot] = Some(el.register_timer(TimerMode::Delay(FAR), tok(i)));
+                        live[slot] = Some(el.register_timer(TimerMode::Delay(FAR), token(i)));
                     }
                     (el, live)
                 },
                 BatchSize::PerIteration,
-            )
+            );
         });
     }
     group.finish();
 }
 
-/// A frame-like mix: 32 ready sources plus 16 emitted tokens.
 fn mixed(c: &mut Criterion) {
     let fds = eventfds(32);
-    let mut el = EventLoop::<Tok>::new().unwrap();
+    let mut el = EventLoop::<Token>::new().unwrap();
     let handles: Vec<_> = fds
         .iter()
         .enumerate()
-        .map(|(i, fd)| el.register_fd(fd, Interest::Readable, tok(i)).unwrap())
+        .map(|(i, fd)| el.register_fd(fd, Interest::Readable, token(i)).unwrap())
         .collect();
     let emitter = el.emitter();
     let mut out = Vec::new();
@@ -256,7 +240,7 @@ fn mixed(c: &mut Criterion) {
             || {
                 kick(&fds);
                 for i in 0..16 {
-                    emitter.emit(tok(i));
+                    emitter.emit(token(i));
                 }
             },
             |()| {
@@ -264,7 +248,7 @@ fn mixed(c: &mut Criterion) {
                 black_box(&out);
             },
             BatchSize::PerIteration,
-        )
+        );
     });
     drop(handles);
 }

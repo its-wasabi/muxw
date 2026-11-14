@@ -18,6 +18,14 @@ pub(super) struct Device {
 
 impl Device {
     pub(super) fn new(device: &udev::Device) -> Result<Self, super::error::Error> {
+        let (Some(devnum), Some(devnode)) = (device.devnum(), device.devnode()) else {
+            return Err(super::error::Error::NotPrimaryCard);
+        };
+
+        if !Self::is_primary_card(devnum) {
+            return Err(super::error::Error::NotPrimaryCard);
+        }
+
         if let Some(pci) = device.parent_with_subsystem("pci")? {
             let vendor = pci
                 .property_value("ID_VENDOR_FROM_DATABASE")
@@ -28,14 +36,6 @@ impl Device {
             let is_boot_vga = pci.attribute_value("boot_vga").and_then(|s| s.to_str()) == Some("1");
 
             tracing::info!("Drm device {vendor:?} | {model:?} | {is_boot_vga:?}");
-        }
-
-        let (Some(devnum), Some(devnode)) = (device.devnum(), device.devnode()) else {
-            return Err(super::error::Error::NotPrimaryCard);
-        };
-
-        if !Self::is_primary_card(devnum) {
-            return Err(super::error::Error::NotPrimaryCard);
         }
 
         let file = std::fs::OpenOptions::new()

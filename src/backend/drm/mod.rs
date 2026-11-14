@@ -1,4 +1,5 @@
 #![allow(unused)]
+#![allow(clippy::todo)]
 
 mod device;
 pub mod error;
@@ -31,9 +32,14 @@ impl Drm {
         let monitor = udev::MonitorBuilder::new()?
             .match_subsystem_devtype("drm", "drm_minor")?
             .listen()?;
-
         let handle =
             event_loop.register_fd(&monitor, crate::event_loop::Interest::Readable, Event::Udev)?;
+
+        let mut enumerator = udev::Enumerator::new()?;
+        enumerator.match_subsystem("drm")?;
+        enumerator.match_property("DEVTYPE", "drm_minor")?;
+        enumerator.match_sysname("card[0-9]*")?;
+        enumerator.match_is_initialized()?;
 
         let mut drm = Self {
             handle,
@@ -44,14 +50,9 @@ impl Drm {
             devices: slotmap::SlotMap::with_capacity_and_key(DEVICES_DEFAULT_CAPACITY),
         };
 
-        let mut enumerator = udev::Enumerator::new()?;
-        enumerator.match_subsystem("drm")?;
-        enumerator.match_property("DEVTYPE", "drm_minor")?;
-        enumerator.match_is_initialized()?;
         for udev_device in enumerator.scan_devices()? {
-            let x = drm.add_device(event_loop, &udev_device);
-            if let Err(err) = x {
-                tracing::error!(?err, "DRM");
+            if let Err(error) = drm.add_device(event_loop, &udev_device) {
+                tracing::error!(?error);
             }
         }
 
@@ -64,41 +65,44 @@ impl Drm {
         event: Event,
     ) -> Result<(), Box<dyn std::error::Error>> {
         match event {
-            // Event::Frame => todo!(),
-            Event::Udev => {
-                self.handle_udev(event_loop);
-            }
-            // Event::Device(device_key) => todo!(),
-            // Event::Output(output_key) => todo!(),
-            _ => (),
+            Event::Udev => self.handle_udev(event_loop),
+            Event::Device(key) => self.handle_device(key),
         }
-
-        Ok(())
     }
 
     fn handle_udev(
         &mut self,
         event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let events = self.monitor.iter().collect::<Vec<_>>();
-        for event in events {
+        while let Some(event) = self.monitor.iter().next() {
             match event.event_type() {
                 udev::EventType::Add => {
-                    self.add_device(event_loop, &event.device());
+                    self.add_device(event_loop, &event.device())?;
                 }
                 udev::EventType::Remove => {
-                    self.remove_device(todo!());
+                    self.remove_device(&event.device())?;
                 }
-                // udev::EventType::Change => todo!("Todo Handle DRM Change Event"),
-                //
-                // udev::EventType::Bind => todo!("Handle DRM Device Bind Event"),
-                // udev::EventType::Unbind => todo!("Handle DRM Device Un-bind Event"),
-                // udev::EventType::Unknown => todo!("Handle DRM Device \"Unknown\" Event"),
+
+                udev::EventType::Change => {
+                    let Some(devnum) = event.devnum() else {
+                        continue;
+                    };
+
+                    // todo!()
+                }
                 _ => (),
             }
         }
 
         Ok(())
+    }
+
+    fn handle_device(&mut self, key: device::DeviceKey) -> Result<(), Box<dyn std::error::Error>> {
+        let Some(entry) = self.devices.get(key) else {
+            return Ok(());
+        };
+
+        todo!()
     }
 
     fn add_device(
@@ -152,10 +156,8 @@ pub struct Output {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
-    Frame,
     Udev,
     Device(device::DeviceKey),
-    Output(OutputKey),
 }
 
 //     pub fn resume(&mut self) -> Result<(), Box<dyn std::error::Error>> {
