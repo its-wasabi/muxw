@@ -17,26 +17,25 @@ impl Compositor {
         let triggered_events = Vec::new();
         let config = crate::config::Config::spawn(context, &mut event_loop)?;
 
-        let seat_manager = crate::backend::seat::Seat::new(&mut event_loop)?;
-        let input_manager =
-            crate::backend::input::Input::new(&mut event_loop, seat_manager.handle())?;
+        let seat = crate::backend::seat::Seat::new(&mut event_loop)?;
+        let input = crate::backend::input::Input::new(&mut event_loop, seat.handle())?;
 
         let renderer = crate::renderer::Renderer::new()?;
-        let drm_manager = crate::backend::drm::Drm::new(&mut event_loop)?;
+        let drm = crate::backend::drm::Drm::new(seat.handle(), &mut event_loop)?;
 
-        let wayland_server = crate::wayland::Wayland::new(context, &mut event_loop)?;
+        let wayland = crate::wayland::Wayland::new(context, &mut event_loop)?;
 
         Ok(Self {
             event_loop,
             triggered_events,
             config,
 
-            seat: seat_manager,
-            input: input_manager,
+            seat,
+            input,
             renderer,
-            drm: drm_manager,
+            drm,
 
-            wayland: wayland_server,
+            wayland,
         })
     }
 
@@ -65,7 +64,7 @@ impl Compositor {
                         crate::backend::seat::SeatEvent::Disable => {
                             tracing::debug!("Seat Disable <- THE IMPORTANT ONE");
                             // self.drm_manager.pause();
-                            self.drm.drop_master()?;
+                            self.drm.release_master_lock()?;
                         }
                     },
 
@@ -93,7 +92,8 @@ impl Compositor {
 
                     crate::token::Token::Drm(event) => {
                         tracing::trace!("Drm Event triggered");
-                        self.drm.dispatch(&mut self.event_loop, event)?;
+                        self.drm
+                            .dispatch(event, self.seat.handle(), &mut self.event_loop)?;
                     }
 
                     crate::token::Token::Wayland(event) => {

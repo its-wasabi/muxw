@@ -11,22 +11,16 @@ slotmap::new_key_type! {
     pub struct OutputKey;
 }
 
-struct DeviceEntry {
-    device: device::Device,
-    handle: crate::event_loop::IoHandle<crate::token::Token>,
-}
-
 pub struct Drm {
     handle: crate::event_loop::IoHandle<crate::token::Token>,
     monitor: udev::MonitorSocket,
 
-    outputs: slotmap::SlotMap<OutputKey, Output>,
-
-    devices: slotmap::SlotMap<device::DeviceKey, DeviceEntry>,
+    devices: slotmap::SlotMap<device::DeviceKey, device::Device>,
 }
 
 impl Drm {
     pub fn new(
+        seat_handle: crate::backend::seat::SeatHandle,
         event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let monitor = udev::MonitorBuilder::new()?
@@ -45,13 +39,11 @@ impl Drm {
             handle,
             monitor,
 
-            outputs: slotmap::SlotMap::with_capacity_and_key(OUTPUTS_DEFAULT_CAPACITY),
-
             devices: slotmap::SlotMap::with_capacity_and_key(DEVICES_DEFAULT_CAPACITY),
         };
 
         for udev_device in enumerator.scan_devices()? {
-            if let Err(error) = drm.add_device(event_loop, &udev_device) {
+            if let Err(error) = drm.add_device(&udev_device, seat_handle.clone(), event_loop) {
                 tracing::error!(?error);
             }
         }
@@ -61,23 +53,25 @@ impl Drm {
 
     pub fn dispatch(
         &mut self,
-        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
         event: Event,
+        seat_handle: crate::backend::seat::SeatHandle,
+        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         match event {
-            Event::Udev => self.handle_udev(event_loop),
+            Event::Udev => self.handle_udev(seat_handle, event_loop),
             Event::Device(key) => self.handle_device(key),
         }
     }
 
     fn handle_udev(
         &mut self,
+        seat_handle: crate::backend::seat::SeatHandle,
         event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         while let Some(event) = self.monitor.iter().next() {
             match event.event_type() {
                 udev::EventType::Add => {
-                    self.add_device(event_loop, &event.device())?;
+                    self.add_device(&event.device(), seat_handle.clone(), event_loop)?;
                 }
                 udev::EventType::Remove => {
                     self.remove_device(&event.device())?;
@@ -107,51 +101,36 @@ impl Drm {
 
     fn add_device(
         &mut self,
-        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
         device: &udev::Device,
+        seat_handle: crate::backend::seat::SeatHandle,
+        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<device::DeviceKey, error::Error> {
-        self.devices.try_insert_with_key(|key| {
-            let device = device::Device::new(device)?;
-            let handle = event_loop.register_fd(
-                &device.file,
-                crate::event_loop::Interest::Readable,
-                Event::Device(key),
-            )?;
-
-            Ok(DeviceEntry { device, handle })
-        })
+        self.devices
+            .try_insert_with_key(|key| device::Device::new(device, seat_handle, key, event_loop))
     }
 
     fn remove_device(&mut self, device: &udev::Device) -> Result<(), error::Error> {
         let devnum = device.devnum().ok_or(error::Error::NotPrimaryCard)?;
-
         if let Some(key) = self
             .devices
             .iter()
-            .find_map(|(key, entry)| (entry.device.devnum == devnum).then_some(key))
+            .find_map(|(key, device)| (device.devnum() == devnum).then_some(key))
         {
-            if let Some(entry) = self.devices.remove(key) {
+            if let Some(device) = self.devices.remove(key) {
                 // remove outputs
             };
         }
+
         Ok(())
     }
 
-    pub fn drop_master(&self) -> std::io::Result<()> {
-        for (_, entry) in &self.devices {
-            entry.device.release_master()?;
+    pub fn release_master_lock(&self) -> Result<(), error::Error> {
+        for device in self.devices.values() {
+            device.release_master_lock()?;
         }
 
         Ok(())
     }
-}
-
-pub struct Output {
-    device: device::DeviceKey,
-
-    connector: drm::control::connector::Handle,
-    crtc: drm::control::crtc::Handle,
-    mode: drm::control::Mode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
