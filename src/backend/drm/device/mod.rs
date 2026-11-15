@@ -49,10 +49,6 @@ impl Device {
     pub(super) fn devnum(&self) -> u64 {
         self.devnum
     }
-
-    pub(super) fn release_master_lock(&self) -> Result<(), super::error::Error> {
-        Ok(self.card.release_master_lock()?)
-    }
 }
 
 struct Card(std::fs::File);

@@ -14,6 +14,9 @@ slotmap::new_key_type! {
 pub struct Drm {
     handle: crate::event_loop::IoHandle<crate::token::Token>,
     monitor: udev::MonitorSocket,
+    seat_handle: crate::backend::seat::SeatHandle,
+
+    active: bool,
 
     devices: slotmap::SlotMap<device::DeviceKey, device::Device>,
 }
@@ -38,6 +41,9 @@ impl Drm {
         let mut drm = Self {
             handle,
             monitor,
+            seat_handle,
+
+            active: true,
 
             devices: slotmap::SlotMap::with_capacity_and_key(DEVICES_DEFAULT_CAPACITY),
         };
@@ -54,11 +60,10 @@ impl Drm {
     pub fn dispatch(
         &mut self,
         event: Event,
-        seat_handle: crate::backend::seat::SeatHandle,
         event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         match event {
-            Event::Udev => self.handle_udev(seat_handle, event_loop),
+            Event::Udev => self.handle_udev(self.seat_handle, event_loop),
             Event::Device(key) => self.handle_device(key),
         }
     }
@@ -124,11 +129,13 @@ impl Drm {
         Ok(())
     }
 
-    pub fn release_master_lock(&self) -> Result<(), error::Error> {
-        for device in self.devices.values() {
-            device.release_master_lock()?;
-        }
+    pub fn resume(&mut self) -> Result<(), error::Error> {
+        self.active = true;
+        Ok(())
+    }
 
+    pub fn suspend(&mut self) -> Result<(), error::Error> {
+        self.active = false;
         Ok(())
     }
 }

@@ -26,7 +26,7 @@ polling = "3.11.0"
 crossbeam-channel = "0.5.15"
 
 input = "0.9.1"
-libseat = "0.2.4"
+libseat-sys = "0.2.0"
 xkbcommon = "0.9.0"
 
 mlua = { version = "0.11.5", default-features = false, features = [

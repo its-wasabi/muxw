@@ -1,4 +1,5 @@
-use std::os::fd::AsRawFd;
+use std::mem::ManuallyDrop;
+use std::os::fd::{AsFd, AsRawFd};
 
 use drm::Device as DRMDevice;
 use drm::control::Device as DRMControlDevice;
@@ -7,7 +8,7 @@ const DRM_MAJOR: u32 = 226;
 const MAX_PRIMARY_MINOR: u32 = 64;
 
 pub(super) struct Card {
-    fd: std::os::fd::OwnedFd,
+    device: crate::backend::seat::Device,
     seat_handle: crate::backend::seat::SeatHandle,
 }
 
@@ -22,7 +23,7 @@ impl Card {
         }
 
         let card = Self {
-            fd: seat_handle.open_device(devnode)?,
+            device: seat_handle.open_device(devnode)?,
             seat_handle,
         };
 
@@ -35,7 +36,7 @@ impl Card {
 
 impl std::os::fd::AsFd for Card {
     fn as_fd(&self) -> std::os::unix::prelude::BorrowedFd<'_> {
-        self.fd.as_fd()
+        self.device.fd.as_fd()
     }
 }
 
@@ -44,8 +45,7 @@ impl drm::control::Device for Card {}
 
 impl Drop for Card {
     fn drop(&mut self) {
-        self.release_master_lock();
-        self.seat_handle.close_device(self.fd.as_raw_fd());
+        self.seat_handle.close_device(self.device.id);
     }
 }
 
