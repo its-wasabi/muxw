@@ -817,7 +817,6 @@ dependencies = [
  "rustc-hash",
  "rustix",
  "serde",
- "slab",
  "slotmap",
  "tracing",
  "tracing-appender",

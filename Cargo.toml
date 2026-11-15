@@ -15,7 +15,6 @@ tracing = { version = "0.1.44", features = ["max_level_trace", "release_max_leve
 tracing-subscriber = { version = "0.3.23", features = ["fmt"] }
 tracing-appender = "0.2.5"
 
-slab = "0.4.12"
 multi_index_map = "0.15.1"
 
 clap = { version = "4.5.54", features = ["derive"] }

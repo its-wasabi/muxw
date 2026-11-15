@@ -3,10 +3,14 @@ use std::os::fd::{AsFd, AsRawFd};
 
 const DEFAULT_DEVICES_CAPACITY: usize = 8;
 
+slotmap::new_key_type! {
+    pub struct DeviceKey;
+}
+
 pub struct Input {
     handle: crate::event_loop::IoHandle<crate::token::Token>,
     libinput: input::Libinput,
-    devices: slab::Slab<input::Device>,
+    devices: slotmap::SlotMap<DeviceKey, input::Device>,
     device_keys: std::collections::HashMap<input::Device, DeviceKey>,
     emitter: crate::event_loop::Emitter<crate::token::Token>,
 }
@@ -33,7 +37,7 @@ impl Input {
 
         Ok(Self {
             libinput,
-            devices: slab::Slab::with_capacity(DEFAULT_DEVICES_CAPACITY),
+            devices: slotmap::SlotMap::with_capacity_and_key(DEFAULT_DEVICES_CAPACITY),
             device_keys: std::collections::HashMap::with_capacity(DEFAULT_DEVICES_CAPACITY),
             emitter: event_loop.emitter(),
             handle,
@@ -57,7 +61,7 @@ impl Input {
             match event {
                 input::Event::Device(input::event::DeviceEvent::Added(device_add_event)) => {
                     let device = device_add_event.device();
-                    let key = DeviceKey(self.devices.insert(device.clone()));
+                    let key = self.devices.insert(device.clone());
                     self.device_keys.insert(device, key);
                     self.emitter.emit(crate::token::Token::Input(Event::Device {
                         key,
@@ -68,7 +72,7 @@ impl Input {
                 input::Event::Device(input::event::DeviceEvent::Removed(device_remove_event)) => {
                     let device = device_remove_event.device();
                     if let Some(key) = self.device_keys.remove(&device) {
-                        self.devices.remove(key.get());
+                        self.devices.remove(key);
                         self.emitter.emit(crate::token::Token::Input(Event::Device {
                             key,
                             kind: EventKind::DeviceRemoved,
@@ -186,15 +190,6 @@ impl input::LibinputInterface for LibinputInterface {
 pub enum Event {
     Dispatch,
     Device { key: DeviceKey, kind: EventKind },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DeviceKey(usize);
-
-impl DeviceKey {
-    pub const fn get(self) -> usize {
-        self.0
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
