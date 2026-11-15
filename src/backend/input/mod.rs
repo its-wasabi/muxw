@@ -1,9 +1,5 @@
-// TODO: Refactor
-
 use input::event::{EventTrait, keyboard::KeyboardEventTrait, pointer::PointerScrollEvent};
 use std::os::fd::{AsFd, AsRawFd};
-
-mod xkb_manager;
 
 const DEFAULT_DEVICES_CAPACITY: usize = 8;
 
@@ -172,25 +168,16 @@ impl input::LibinputInterface for LibinputInterface {
         path: &std::path::Path,
         _flags: i32,
     ) -> std::result::Result<std::os::fd::OwnedFd, i32> {
-        let device = self.seat_handle.open_device(path).map_err(|error| {
-            error.raw_os_error().unwrap_or_else(|| {
-                tracing::warn!(
-                    ?error,
-                    "seat open_device error had no OS errno; reporting EIO"
-                );
-                rustix::io::Errno::IO.raw_os_error()
-            })
-        })?;
-
+        let device = self.seat_handle.open_device_raw(path)?;
         self.devices.insert(device.fd.as_raw_fd(), device.id);
         Ok(device.fd)
     }
 
     fn close_restricted(&mut self, fd: std::os::fd::OwnedFd) {
-        if let Some(device_id) = self.devices.remove(&fd.as_raw_fd()) {
-            if let Err(error) = self.seat_handle.close_device(device_id) {
-                tracing::error!(?error, "Failed to close input device in libseat");
-            }
+        if let Some(device_id) = self.devices.remove(&fd.as_raw_fd())
+            && let Err(error) = self.seat_handle.close_device(device_id)
+        {
+            tracing::error!(?error, "Failed to close input device in libseat");
         }
     }
 }

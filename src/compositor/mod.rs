@@ -115,7 +115,6 @@ impl Compositor {
 
                     crate::token::Token::Config(command) => {
                         eprintln!("Apply config logic here");
-                        self.event_loop.emitter().emit(crate::token::Token::Exit);
                     }
 
                     crate::token::Token::Exit => {
