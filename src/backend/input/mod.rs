@@ -1,4 +1,10 @@
-use input::event::{EventTrait, keyboard::KeyboardEventTrait, pointer::PointerScrollEvent};
+mod error;
+
+use input::{
+    AsRaw,
+    event::{EventTrait, keyboard::KeyboardEventTrait, pointer::PointerScrollEvent},
+};
+use slotmap::Key;
 use std::os::fd::{AsFd, AsRawFd};
 
 const DEFAULT_DEVICES_CAPACITY: usize = 8;
@@ -7,27 +13,66 @@ slotmap::new_key_type! {
     pub struct DeviceKey;
 }
 
+impl Into<DeviceKey> for *mut std::ffi::c_void {
+    #[inline]
+    fn into(self) -> DeviceKey {
+        slotmap::KeyData::from_ffi(self as u64).into()
+    }
+}
+
+impl From<DeviceKey> for *mut std::ffi::c_void {
+    #[inline]
+    fn from(value: DeviceKey) -> Self {
+        value.data().as_ffi() as *mut std::ffi::c_void
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EventKind {
+    DeviceAdded,
+    DeviceRemoved,
+    Keyboard {
+        keycode: u32,
+        state: input::event::keyboard::KeyState,
+    },
+    PointerButton {
+        keycode: u32,
+        state: input::event::pointer::ButtonState,
+    },
+    PointerScroll {
+        horizontal: f64,
+        vertical: f64,
+    },
+    Motion {
+        delta_x: f64,
+        delta_y: f64,
+    },
+}
+
+pub struct InputEvent {
+    pub key: DeviceKey,
+    pub kind: EventKind,
+}
+
 pub struct Input {
     handle: crate::event_loop::IoHandle<crate::token::Token>,
     libinput: input::Libinput,
     devices: slotmap::SlotMap<DeviceKey, input::Device>,
-    device_keys: std::collections::HashMap<input::Device, DeviceKey>,
-    emitter: crate::event_loop::Emitter<crate::token::Token>,
 }
 
 impl Input {
     pub fn new(
         event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
         seat_handle: crate::backend::seat::SeatHandle,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<Self, error::Error> {
         let mut libinput = input::Libinput::new_with_udev(LibinputInterface {
             seat_handle,
             devices: std::collections::HashMap::with_capacity(DEFAULT_DEVICES_CAPACITY),
         });
 
-        libinput.udev_assign_seat("seat0").map_err(|()| {
-            Box::<dyn std::error::Error>::from("Failed to assign udev seat: seat0")
-        })?;
+        libinput
+            .udev_assign_seat("seat0")
+            .map_err(|()| error::Error::AssignSeat)?;
 
         let handle = event_loop.register_fd(
             &libinput.as_fd(),
@@ -38,8 +83,6 @@ impl Input {
         Ok(Self {
             libinput,
             devices: slotmap::SlotMap::with_capacity_and_key(DEFAULT_DEVICES_CAPACITY),
-            device_keys: std::collections::HashMap::with_capacity(DEFAULT_DEVICES_CAPACITY),
-            emitter: event_loop.emitter(),
             handle,
         })
     }
@@ -48,110 +91,97 @@ impl Input {
         self.libinput.suspend();
     }
 
-    pub fn resume(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.libinput
-            .resume()
-            // TODO: Write real error
-            .map_err(|()| Box::<dyn std::error::Error>::from("Failed to resume libinput"))
+    pub fn resume(&mut self) -> Result<(), error::Error> {
+        self.libinput.resume().map_err(|()| error::Error::Resume)
     }
 
-    pub fn dispatch(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn dispatch(&mut self, triggered: &mut Vec<InputEvent>) -> Result<(), error::Error> {
+        triggered.clear();
         self.libinput.dispatch()?;
+
         for event in &mut self.libinput {
             match event {
-                input::Event::Device(input::event::DeviceEvent::Added(device_add_event)) => {
-                    let device = device_add_event.device();
+                input::Event::Device(input::event::DeviceEvent::Added(event)) => {
+                    let device = event.device();
                     let key = self.devices.insert(device.clone());
-                    self.device_keys.insert(device, key);
-                    self.emitter.emit(crate::token::Token::Input(Event::Device {
-                        key,
-                        kind: EventKind::DeviceAdded,
-                    }));
+                    unsafe {
+                        input::ffi::libinput_device_set_user_data(
+                            device.as_raw() as *mut _,
+                            key.into(),
+                        )
+                    };
+
+                    let kind = EventKind::DeviceAdded;
+
+                    triggered.push(InputEvent { key, kind });
                 }
 
-                input::Event::Device(input::event::DeviceEvent::Removed(device_remove_event)) => {
-                    let device = device_remove_event.device();
-                    if let Some(key) = self.device_keys.remove(&device) {
-                        self.devices.remove(key);
-                        self.emitter.emit(crate::token::Token::Input(Event::Device {
-                            key,
-                            kind: EventKind::DeviceRemoved,
-                        }));
-                    }
+                input::Event::Device(input::event::DeviceEvent::Removed(event)) => {
+                    let device = event.device();
+                    let key = unsafe {
+                        input::ffi::libinput_device_get_user_data(device.as_raw() as *mut _).into()
+                    };
+                    self.devices.remove(key);
+
+                    let kind = EventKind::DeviceRemoved;
+
+                    triggered.push(InputEvent { key, kind });
                 }
 
-                input::Event::Keyboard(keyboard_event) => {
-                    let device = keyboard_event.device();
-                    if let Some(key) = self.device_keys.get(&device) {
-                        self.emitter.emit(crate::token::Token::Input(Event::Device {
-                            key: *key,
-                            kind: EventKind::Keyboard {
-                                keycode: keyboard_event.key(),
-                                state: keyboard_event.key_state(),
-                            },
-                        }));
-                    }
+                input::Event::Keyboard(event) => {
+                    let device = event.device();
+                    let key = unsafe {
+                        input::ffi::libinput_device_get_user_data(device.as_raw() as *mut _).into()
+                    };
+
+                    let kind = EventKind::Keyboard {
+                        keycode: event.key(),
+                        state: event.key_state(),
+                    };
+
+                    triggered.push(InputEvent { key, kind });
                 }
 
-                input::Event::Pointer(input::event::PointerEvent::Button(pointer_button_event)) => {
-                    let device = pointer_button_event.device();
-                    if let Some(key) = self.device_keys.get(&device) {
-                        self.emitter.emit(crate::token::Token::Input(Event::Device {
-                            key: *key,
-                            kind: EventKind::PointerButton {
-                                keycode: pointer_button_event.button(),
-                                state: pointer_button_event.button_state(),
-                            },
-                        }));
-                    }
+                input::Event::Pointer(input::event::PointerEvent::Button(event)) => {
+                    let device = event.device();
+                    let key = unsafe {
+                        input::ffi::libinput_device_get_user_data(device.as_raw() as *mut _).into()
+                    };
+
+                    let kind = EventKind::PointerButton {
+                        keycode: event.button(),
+                        state: event.button_state(),
+                    };
+
+                    triggered.push(InputEvent { key, kind });
                 }
 
-                input::Event::Pointer(input::event::PointerEvent::ScrollWheel(
-                    pointer_scroll_wheel_event,
-                )) => {
-                    let device = pointer_scroll_wheel_event.device();
-                    if let Some(key) = self.device_keys.get(&device) {
-                        if pointer_scroll_wheel_event
-                            .has_axis(input::event::pointer::Axis::Vertical)
-                        {
-                            let vertical = pointer_scroll_wheel_event
-                                .scroll_value(input::event::pointer::Axis::Vertical);
+                input::Event::Pointer(input::event::PointerEvent::ScrollWheel(event)) => {
+                    let device = event.device();
+                    let key = unsafe {
+                        input::ffi::libinput_device_get_user_data(device.as_raw() as *mut _).into()
+                    };
 
-                            if vertical != 0.0 {
-                                self.emitter.emit(crate::token::Token::Input(Event::Device {
-                                    key: *key,
-                                    kind: EventKind::PointerVerticalScroll { scroll: vertical },
-                                }));
-                            }
-                        }
+                    let kind = EventKind::PointerScroll {
+                        horizontal: event.scroll_value(input::event::pointer::Axis::Horizontal),
+                        vertical: event.scroll_value(input::event::pointer::Axis::Vertical),
+                    };
 
-                        if pointer_scroll_wheel_event
-                            .has_axis(input::event::pointer::Axis::Horizontal)
-                        {
-                            let horizontal = pointer_scroll_wheel_event
-                                .scroll_value(input::event::pointer::Axis::Horizontal);
-
-                            if horizontal != 0.0 {
-                                self.emitter.emit(crate::token::Token::Input(Event::Device {
-                                    key: *key,
-                                    kind: EventKind::PointerHorizontalScroll { scroll: horizontal },
-                                }));
-                            }
-                        }
-                    }
+                    triggered.push(InputEvent { key, kind });
                 }
 
-                input::Event::Pointer(input::event::PointerEvent::Motion(motion)) => {
-                    let device = motion.device();
-                    if let Some(key) = self.device_keys.get(&device) {
-                        self.emitter.emit(crate::token::Token::Input(Event::Device {
-                            key: *key,
-                            kind: EventKind::Motion {
-                                delta_x: motion.dx(),
-                                delta_y: motion.dy(),
-                            },
-                        }));
-                    }
+                input::Event::Pointer(input::event::PointerEvent::Motion(event)) => {
+                    let device = event.device();
+                    let key = unsafe {
+                        input::ffi::libinput_device_get_user_data(device.as_raw() as *mut _).into()
+                    };
+
+                    let kind = EventKind::Motion {
+                        delta_x: event.dx(),
+                        delta_y: event.dy(),
+                    };
+
+                    triggered.push(InputEvent { key, kind });
                 }
                 _ => {}
             }
@@ -189,29 +219,4 @@ impl input::LibinputInterface for LibinputInterface {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
     Dispatch,
-    Device { key: DeviceKey, kind: EventKind },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum EventKind {
-    DeviceAdded,
-    DeviceRemoved,
-    Keyboard {
-        keycode: u32,
-        state: input::event::keyboard::KeyState,
-    },
-    PointerButton {
-        keycode: u32,
-        state: input::event::pointer::ButtonState,
-    },
-    PointerVerticalScroll {
-        scroll: f64,
-    },
-    PointerHorizontalScroll {
-        scroll: f64,
-    },
-    Motion {
-        delta_x: f64,
-        delta_y: f64,
-    },
 }

@@ -2,41 +2,46 @@ pub struct Compositor {
     wayland: crate::wayland::Wayland,
     drm: crate::backend::drm::Drm,
     renderer: crate::renderer::Renderer,
-    input: crate::backend::input::Input,
     config: crate::config::Handle,
 
-    // NOTE: Must be dropped after other components since it handles device close calls
-    seat: crate::backend::seat::Seat,
+    input: crate::backend::input::Input,
+    triggered_input: Vec<crate::backend::input::InputEvent>,
 
     event_loop: crate::event_loop::EventLoop<crate::token::Token>,
     triggered_events: Vec<crate::token::Token>,
+
+    // NOTE: Must be dropped after other components since it handles device close calls
+    seat: crate::backend::seat::Seat,
 }
 
 impl Compositor {
     pub fn new(context: &crate::context::Context) -> Result<Self, Box<dyn std::error::Error>> {
         let mut event_loop = crate::event_loop::EventLoop::new()?;
         let triggered_events = Vec::new();
+
         let config = crate::config::Config::spawn(context, &mut event_loop)?;
-
         let seat = crate::backend::seat::Seat::new(&mut event_loop)?;
-        let input = crate::backend::input::Input::new(&mut event_loop, seat.handle())?;
-
         let renderer = crate::renderer::Renderer::new()?;
         let drm = crate::backend::drm::Drm::new(seat.handle(), &mut event_loop)?;
+
+        let input = crate::backend::input::Input::new(&mut event_loop, seat.handle())?;
+        let triggered_input = Vec::new();
 
         let wayland = crate::wayland::Wayland::new(context, &mut event_loop)?;
 
         Ok(Self {
-            event_loop,
-            triggered_events,
+            wayland,
+            drm,
+            renderer,
             config,
 
-            seat,
             input,
-            renderer,
-            drm,
+            triggered_input,
 
-            wayland,
+            event_loop,
+            triggered_events,
+
+            seat,
         })
     }
 
@@ -74,16 +79,13 @@ impl Compositor {
                         }
                     },
 
-                    crate::token::Token::Input(event) => match event {
-                        crate::backend::input::Event::Dispatch => {
-                            self.input.dispatch()?;
-                        }
-
-                        crate::backend::input::Event::Device { key, kind } => {
-                            if let crate::backend::input::EventKind::Keyboard {
-                                keycode,
-                                state: input::event::keyboard::KeyState::Pressed,
-                            } = kind
+                    crate::token::Token::Input(crate::backend::input::Event::Dispatch) => {
+                        self.input.dispatch(&mut self.triggered_input)?;
+                        for event in &self.triggered_input {
+                            if let crate::backend::input::InputEvent {
+                                key,
+                                kind: crate::backend::input::EventKind::Keyboard { keycode, state },
+                            } = event
                             {
                                 tracing::trace!("KEY PRESS: {keycode:?}");
 
@@ -91,7 +93,7 @@ impl Compositor {
                                 let f1 = u32::from(evdev::KeyCode::KEY_F1.code());
                                 let f12 = u32::from(evdev::KeyCode::KEY_F12.code());
 
-                                if keycode == esc {
+                                if *keycode == esc {
                                     self.event_loop.emitter().emit(crate::token::Token::Exit);
                                 } else if (f1..=f12).contains(&keycode) {
                                     // (XKB_KEY_XF86Switch_VT_1 .. 12)
@@ -103,7 +105,7 @@ impl Compositor {
                                 }
                             }
                         }
-                    },
+                    }
 
                     crate::token::Token::Drm(event) => {
                         self.drm.dispatch(event, &mut self.event_loop)?;
@@ -118,8 +120,7 @@ impl Compositor {
                     }
 
                     crate::token::Token::Exit => {
-                        tracing::trace!("EXIT {:?}", std::time::Instant::now());
-
+                        tracing::trace!("EXIT");
                         return Ok(());
                     }
                 }

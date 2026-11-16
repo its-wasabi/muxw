@@ -18,13 +18,11 @@ tracing-appender = "0.2.5"
 multi_index_map = "0.15.1"
 
 clap = { version = "4.5.54", features = ["derive"] }
-serde = { version = "1.0.228", features = ["derive"] }
 
-udev = "0.9.3"
 polling = "3.11.0"
 crossbeam-channel = "0.5.15"
 
-input = "0.9.1"
+udev = "0.9.3"
 libseat-sys = "0.2.0"
 xkbcommon = "0.9.0"
 
@@ -43,8 +41,11 @@ wayland-protocols = { version = "0.32.9", features = ["server", "staging"] }
 rustix = "1.1.4"
 bitflags = "2.11.0"
 rustc-hash = "2.1.2"
+# TODO: Remove evdev since xkbcommon already handles things evdev would do
+# (You have to write xkb module first and more logical kb handling)
 evdev = "0.13.2"
 slotmap = "1.1.1"
+input = "0.10.0"
 
 [build-dependencies]
 clap_complete = "4.5.65"
