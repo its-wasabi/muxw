@@ -8,9 +8,9 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::Io(error) => todo!(),
-            Error::AssignSeat => todo!(),
-            Error::Resume => todo!(),
+            Self::Io(error) => todo!(),
+            Self::AssignSeat => todo!(),
+            Self::Resume => todo!(),
         }
     }
 }
@@ -18,8 +18,8 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Error::Io(error) => Some(error),
-            Error::AssignSeat | Error::Resume => None,
+            Self::Io(error) => Some(error),
+            Self::AssignSeat | Self::Resume => None,
         }
     }
 }

@@ -1,4 +1,5 @@
 #[derive(Debug)]
+
 pub enum Error {
     ReadConfig {
         path: std::path::PathBuf,
@@ -32,11 +33,11 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Error::ReadConfig { error: source, .. } => source.source(),
-            Error::WriteDefaultConfig { error: source, .. } => source.source(),
-            Error::Thread(error) => error.source(),
-            Error::ThreadGone => None,
-            Error::Lua(error) => error.source(),
+            Self::ReadConfig { error, .. }
+            | Self::WriteDefaultConfig { error, .. }
+            | Self::Thread(error) => error.source(),
+            Self::Lua(error) => error.source(),
+            Self::ThreadGone => None,
         }
     }
 }

@@ -46,7 +46,7 @@ impl Device {
     }
 
     #[inline]
-    pub(super) fn devnum(&self) -> u64 {
+    pub(super) const fn devnum(&self) -> u64 {
         self.devnum
     }
 }

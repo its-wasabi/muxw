@@ -1,3 +1,5 @@
+mod seat;
+
 pub struct Compositor {
     wayland: crate::wayland::Wayland,
     drm: crate::backend::drm::Drm,
@@ -83,17 +85,41 @@ impl Compositor {
                         self.input.dispatch(&mut self.triggered_input)?;
                         for event in &self.triggered_input {
                             if let crate::backend::input::InputEvent {
-                                key,
                                 kind: crate::backend::input::EventKind::Keyboard { keycode, state },
+                                ..
                             } = event
                             {
-                                tracing::trace!("KEY PRESS: {keycode:?}");
-
                                 let esc = u32::from(evdev::KeyCode::KEY_ESC.code());
                                 let f1 = u32::from(evdev::KeyCode::KEY_F1.code());
                                 let f12 = u32::from(evdev::KeyCode::KEY_F12.code());
 
-                                if *keycode == esc {
+                                if *state == input::event::keyboard::KeyState::Pressed {
+                                    tracing::trace!("KEY PRESS: {keycode:?}");
+                                    match *keycode {
+                                        keycode if keycode == esc => self
+                                            .event_loop
+                                            .emitter()
+                                            .emit(crate::token::Token::Exit),
+
+                                        keycode if (f1..=f12).contains(&keycode) => {
+                                            let vt = (keycode - f1 + 1) as i32;
+                                            tracing::info!(vt, "Requesting VT switch");
+                                            if let Err(error) = self.seat.switch_session(vt) {
+                                                tracing::error!(
+                                                    ?error,
+                                                    vt,
+                                                    "Failed to switch VT session"
+                                                );
+                                            }
+                                        }
+
+                                        _ => (),
+                                    }
+                                }
+
+                                if *state == input::event::keyboard::KeyState::Pressed
+                                    && *keycode == esc
+                                {
                                     self.event_loop.emitter().emit(crate::token::Token::Exit);
                                 } else if (f1..=f12).contains(&keycode) {
                                     // (XKB_KEY_XF86Switch_VT_1 .. 12)

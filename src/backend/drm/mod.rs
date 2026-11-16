@@ -120,10 +120,9 @@ impl Drm {
             .devices
             .iter()
             .find_map(|(key, device)| (device.devnum() == devnum).then_some(key))
+            && let Some(device) = self.devices.remove(key)
         {
-            if let Some(device) = self.devices.remove(key) {
-                // remove outputs
-            };
+            // remove outputs
         }
 
         Ok(())
