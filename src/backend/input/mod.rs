@@ -13,10 +13,10 @@ slotmap::new_key_type! {
     pub struct DeviceKey;
 }
 
-impl Into<DeviceKey> for *mut std::ffi::c_void {
+impl From<*mut std::ffi::c_void> for DeviceKey {
     #[inline]
-    fn into(self) -> DeviceKey {
-        slotmap::KeyData::from_ffi(self as u64).into()
+    fn from(val: *mut std::ffi::c_void) -> Self {
+        slotmap::KeyData::from_ffi(val as u64).into()
     }
 }
 
@@ -106,10 +106,10 @@ impl Input {
                     let key = self.devices.insert(device.clone());
                     unsafe {
                         input::ffi::libinput_device_set_user_data(
-                            device.as_raw() as *mut _,
+                            device.as_raw().cast_mut(),
                             key.into(),
-                        )
-                    };
+                        );
+                    }
 
                     let kind = EventKind::DeviceAdded;
 
@@ -119,7 +119,7 @@ impl Input {
                 input::Event::Device(input::event::DeviceEvent::Removed(event)) => {
                     let device = event.device();
                     let key = unsafe {
-                        input::ffi::libinput_device_get_user_data(device.as_raw() as *mut _).into()
+                        input::ffi::libinput_device_get_user_data(device.as_raw().cast_mut()).into()
                     };
                     self.devices.remove(key);
 
@@ -131,7 +131,7 @@ impl Input {
                 input::Event::Keyboard(event) => {
                     let device = event.device();
                     let key = unsafe {
-                        input::ffi::libinput_device_get_user_data(device.as_raw() as *mut _).into()
+                        input::ffi::libinput_device_get_user_data(device.as_raw().cast_mut()).into()
                     };
 
                     let kind = EventKind::Keyboard {
@@ -145,7 +145,7 @@ impl Input {
                 input::Event::Pointer(input::event::PointerEvent::Button(event)) => {
                     let device = event.device();
                     let key = unsafe {
-                        input::ffi::libinput_device_get_user_data(device.as_raw() as *mut _).into()
+                        input::ffi::libinput_device_get_user_data(device.as_raw().cast_mut()).into()
                     };
 
                     let kind = EventKind::PointerButton {
@@ -159,7 +159,7 @@ impl Input {
                 input::Event::Pointer(input::event::PointerEvent::ScrollWheel(event)) => {
                     let device = event.device();
                     let key = unsafe {
-                        input::ffi::libinput_device_get_user_data(device.as_raw() as *mut _).into()
+                        input::ffi::libinput_device_get_user_data(device.as_raw().cast_mut()).into()
                     };
 
                     let kind = EventKind::PointerScroll {
@@ -173,7 +173,7 @@ impl Input {
                 input::Event::Pointer(input::event::PointerEvent::Motion(event)) => {
                     let device = event.device();
                     let key = unsafe {
-                        input::ffi::libinput_device_get_user_data(device.as_raw() as *mut _).into()
+                        input::ffi::libinput_device_get_user_data(device.as_raw().cast_mut()).into()
                     };
 
                     let kind = EventKind::Motion {
@@ -216,7 +216,7 @@ impl input::LibinputInterface for LibinputInterface {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
     Dispatch,
 }
