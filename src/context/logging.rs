@@ -81,6 +81,7 @@ pub fn init_logging(target: &LogTarget) -> Result<LoggerGuard, super::error::Err
         .with_max_level(tracing_subscriber::filter::LevelFilter::TRACE)
         .with_writer(non_blocking)
         .with_ansi(dump_target.is_some())
+        .compact()
         .try_init()
         .map_err(super::error::Error::InitLogger)?;
 

@@ -14,14 +14,15 @@ slotmap::new_key_type! {
 pub(super) struct Device {
     card: card::Card,
     handle: crate::event_loop::IoHandle<crate::token::Token>,
+
     devnum: u64,
-    outputs: Vec<super::OutputKey>,
+    resources: drm::control::ResourceHandles,
 }
 
 impl Device {
     pub(super) fn new(
         device: &udev::Device,
-        seat_handle: crate::backend::seat::SeatHandle,
+        seat_handle: crate::backend::session::SeatHandle,
         key: DeviceKey,
         event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<Self, super::error::Error> {
@@ -30,19 +31,31 @@ impl Device {
         };
 
         let card = card::Card::new(devnum, devnode, seat_handle)?;
-
         let handle = event_loop.register_fd(
             &card.as_fd(),
             crate::event_loop::Interest::Readable,
             super::Event::Device(key),
         )?;
 
+        let resources = card.resource_handles()?;
+
+        for &connector in &resources.connectors {
+            let connector = card.get_connector(connector, false)?;
+            if connector.state() == drm::control::connector::State::Connected {
+                tracing::trace!("{:?} Connected", connector.interface());
+            }
+        }
+
         Ok(Self {
             card,
             handle,
             devnum,
-            outputs: Vec::new(),
+            resources,
         })
+    }
+
+    pub(super) const fn resume(&mut self) -> Result<(), super::error::Error> {
+        todo!()
     }
 
     #[inline]

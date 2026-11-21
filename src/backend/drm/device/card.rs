@@ -8,15 +8,15 @@ const DRM_MAJOR: u32 = 226;
 const MAX_PRIMARY_MINOR: u32 = 64;
 
 pub(super) struct Card {
-    device: crate::backend::seat::Device,
-    seat_handle: crate::backend::seat::SeatHandle,
+    device: crate::backend::session::Device,
+    seat_handle: crate::backend::session::SeatHandle,
 }
 
 impl Card {
     pub(super) fn new(
         devnum: u64,
         devnode: &std::path::Path,
-        seat_handle: crate::backend::seat::SeatHandle,
+        seat_handle: crate::backend::session::SeatHandle,
     ) -> Result<Self, crate::backend::drm::error::Error> {
         if !is_primary_card(devnum) {
             return Err(crate::backend::drm::error::Error::NotPrimaryCard);

@@ -810,7 +810,6 @@ dependencies = [
  "iai-callgrind",
  "input",
  "libseat-sys",
- "log",
  "mlua",
  "multi_index_map",
  "polling",

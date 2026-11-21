@@ -3,7 +3,7 @@ const _: () = assert!(std::mem::size_of::<Token>() <= 48);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
-    Seat(crate::backend::seat::Event),
+    Seat(crate::backend::session::Event),
     Input(crate::backend::input::Event),
     Drm(crate::backend::drm::Event),
     Wayland(crate::wayland::Event),
@@ -12,8 +12,8 @@ pub enum Token {
     Exit,
 }
 
-impl From<crate::backend::seat::Event> for Token {
-    fn from(value: crate::backend::seat::Event) -> Self {
+impl From<crate::backend::session::Event> for Token {
+    fn from(value: crate::backend::session::Event) -> Self {
         Self::Seat(value)
     }
 }

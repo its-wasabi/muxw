@@ -7,14 +7,10 @@ pub mod error;
 const DEVICES_DEFAULT_CAPACITY: usize = 1;
 const OUTPUTS_DEFAULT_CAPACITY: usize = 1;
 
-slotmap::new_key_type! {
-    pub struct OutputKey;
-}
-
 pub struct Drm {
     handle: crate::event_loop::IoHandle<crate::token::Token>,
     monitor: udev::MonitorSocket,
-    seat_handle: crate::backend::seat::SeatHandle,
+    seat_handle: crate::backend::session::SeatHandle,
 
     active: bool,
 
@@ -23,7 +19,7 @@ pub struct Drm {
 
 impl Drm {
     pub fn new(
-        seat_handle: crate::backend::seat::SeatHandle,
+        seat_handle: crate::backend::session::SeatHandle,
         event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let monitor = udev::MonitorBuilder::new()?
@@ -70,7 +66,7 @@ impl Drm {
 
     fn handle_udev(
         &mut self,
-        seat_handle: crate::backend::seat::SeatHandle,
+        seat_handle: crate::backend::session::SeatHandle,
         event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         while let Some(event) = self.monitor.iter().next() {
@@ -107,7 +103,7 @@ impl Drm {
     fn add_device(
         &mut self,
         device: &udev::Device,
-        seat_handle: crate::backend::seat::SeatHandle,
+        seat_handle: crate::backend::session::SeatHandle,
         event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
     ) -> Result<device::DeviceKey, error::Error> {
         self.devices
@@ -130,6 +126,11 @@ impl Drm {
 
     pub fn resume(&mut self) -> Result<(), error::Error> {
         self.active = true;
+
+        for device in self.devices.values_mut() {
+            // TODO: device.resume()?;
+        }
+
         Ok(())
     }
 

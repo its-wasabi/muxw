@@ -5,15 +5,13 @@ pub struct Compositor {
     drm: crate::backend::drm::Drm,
     renderer: crate::renderer::Renderer,
     config: crate::config::Handle,
-
-    input: crate::backend::input::Input,
-    triggered_input: Vec<crate::backend::input::InputEvent>,
+    input: crate::backend::input::Libinput,
 
     event_loop: crate::event_loop::EventLoop<crate::token::Token>,
     triggered_events: Vec<crate::token::Token>,
 
     // NOTE: Must be dropped after other components since it handles device close calls
-    seat: crate::backend::seat::Seat,
+    seat: crate::backend::session::Seat,
 }
 
 impl Compositor {
@@ -22,23 +20,21 @@ impl Compositor {
         let triggered_events = Vec::new();
 
         let config = crate::config::Config::spawn(context, &mut event_loop)?;
-        let seat = crate::backend::seat::Seat::new(&mut event_loop)?;
+        let seat = crate::backend::session::Seat::new(&mut event_loop)?;
         let renderer = crate::renderer::Renderer::new()?;
         let drm = crate::backend::drm::Drm::new(seat.handle(), &mut event_loop)?;
-
-        let input = crate::backend::input::Input::new(&mut event_loop, seat.handle())?;
-        let triggered_input = Vec::new();
+        let input = crate::backend::input::Libinput::new(&mut event_loop, seat.handle())?;
 
         let wayland = crate::wayland::Wayland::new(context, &mut event_loop)?;
+
+        tracing::trace!("ALL INIT");
 
         Ok(Self {
             wayland,
             drm,
             renderer,
             config,
-
             input,
-            triggered_input,
 
             event_loop,
             triggered_events,
@@ -56,22 +52,23 @@ impl Compositor {
 
                 match token {
                     crate::token::Token::Seat(event) => match event {
-                        crate::backend::seat::Event::Dispatch => {
+                        crate::backend::session::Event::Dispatch => {
                             if let Err(error) = self.seat.dispatch() {
                                 tracing::error!(?error, "Failed to dispatch libseat seat");
                             }
                         }
 
-                        crate::backend::seat::Event::Enable => {
+                        crate::backend::session::Event::Enable => {
                             if let Err(error) = self.input.resume() {
                                 tracing::error!(?error, "Failed to resume libinput");
                             }
+
                             if let Err(error) = self.drm.resume() {
                                 tracing::error!(?error, "Failed to resume DRM");
                             }
                         }
 
-                        crate::backend::seat::Event::Disable => {
+                        crate::backend::session::Event::Disable => {
                             self.input.suspend();
                             self.drm.suspend()?;
 
@@ -82,10 +79,14 @@ impl Compositor {
                     },
 
                     crate::token::Token::Input(crate::backend::input::Event::Dispatch) => {
-                        self.input.dispatch(&mut self.triggered_input)?;
-                        for event in &self.triggered_input {
+                        self.input.dispatch(|event| {
                             if let crate::backend::input::InputEvent {
-                                kind: crate::backend::input::EventKind::Keyboard { keycode, state },
+                                kind:
+                                    crate::backend::input::EventKind::KeyboardKey {
+                                        keycode,
+                                        pressed,
+                                        ..
+                                    },
                                 ..
                             } = event
                             {
@@ -93,9 +94,9 @@ impl Compositor {
                                 let f1 = u32::from(evdev::KeyCode::KEY_F1.code());
                                 let f12 = u32::from(evdev::KeyCode::KEY_F12.code());
 
-                                if *state == input::event::keyboard::KeyState::Pressed {
+                                if pressed {
                                     tracing::trace!("KEY PRESS: {keycode:?}");
-                                    match *keycode {
+                                    match keycode {
                                         keycode if keycode == esc => self
                                             .event_loop
                                             .emitter()
@@ -116,21 +117,8 @@ impl Compositor {
                                         _ => (),
                                     }
                                 }
-
-                                if *state == input::event::keyboard::KeyState::Pressed
-                                    && *keycode == esc
-                                {
-                                    self.event_loop.emitter().emit(crate::token::Token::Exit);
-                                } else if (f1..=f12).contains(&keycode) {
-                                    // (XKB_KEY_XF86Switch_VT_1 .. 12)
-                                    let vt = (keycode - f1 + 1) as i32;
-                                    tracing::info!(vt, "Requesting VT switch");
-                                    if let Err(error) = self.seat.switch_session(vt) {
-                                        tracing::error!(?error, vt, "Failed to switch VT session");
-                                    }
-                                }
                             }
-                        }
+                        })?;
                     }
 
                     crate::token::Token::Drm(event) => {
