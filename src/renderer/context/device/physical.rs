@@ -3,8 +3,8 @@ pub(super) struct PhysicalDevice {
     pub inner: ash::vk::PhysicalDevice,
     pub properties: ash::vk::PhysicalDeviceProperties,
     pub memory_properties: ash::vk::PhysicalDeviceMemoryProperties,
-    pub primary_node: (crate::meta::Major, crate::meta::Minor),
-    pub render_node: (crate::meta::Major, crate::meta::Minor),
+    pub primary_node: (crate::build_info::Major, crate::build_info::Minor),
+    pub render_node: (crate::build_info::Major, crate::build_info::Minor),
     pub graphics_family_index: u32,
     pub transfer_family_index: u32,
 }

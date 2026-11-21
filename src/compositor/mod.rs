@@ -7,8 +7,8 @@ pub struct Compositor {
     config: crate::config::Handle,
     input: crate::backend::input::Libinput,
 
-    event_loop: crate::event_loop::EventLoop<crate::token::Token>,
-    triggered_events: Vec<crate::token::Token>,
+    event_loop: crate::event_loop::EventLoop<crate::event::Token>,
+    triggered_events: Vec<crate::event::Token>,
 
     // NOTE: Must be dropped after other components since it handles device close calls
     seat: crate::backend::session::Seat,
@@ -51,7 +51,7 @@ impl Compositor {
                 let _span_guard = tracing::debug_span!("event", ?token).entered();
 
                 match token {
-                    crate::token::Token::Seat(event) => match event {
+                    crate::event::Token::Seat(event) => match event {
                         crate::backend::session::Event::Dispatch => {
                             if let Err(error) = self.seat.dispatch() {
                                 tracing::error!(?error, "Failed to dispatch libseat seat");
@@ -78,7 +78,7 @@ impl Compositor {
                         }
                     },
 
-                    crate::token::Token::Input(crate::backend::input::Event::Dispatch) => {
+                    crate::event::Token::Input(crate::backend::input::Event::Dispatch) => {
                         self.input.dispatch(|event| {
                             if let crate::backend::input::InputEvent {
                                 kind:
@@ -100,7 +100,7 @@ impl Compositor {
                                         keycode if keycode == esc => self
                                             .event_loop
                                             .emitter()
-                                            .emit(crate::token::Token::Exit),
+                                            .emit(crate::event::Token::Exit),
 
                                         keycode if (f1..=f12).contains(&keycode) => {
                                             let vt = (keycode - f1 + 1) as i32;
@@ -121,19 +121,19 @@ impl Compositor {
                         })?;
                     }
 
-                    crate::token::Token::Drm(event) => {
+                    crate::event::Token::Drm(event) => {
                         self.drm.dispatch(event, &mut self.event_loop)?;
                     }
 
-                    crate::token::Token::Wayland(event) => {
+                    crate::event::Token::Wayland(event) => {
                         self.wayland.dispatch(event, &self.event_loop)?;
                     }
 
-                    crate::token::Token::Config(command) => {
+                    crate::event::Token::Config(command) => {
                         eprintln!("Apply config logic here");
                     }
 
-                    crate::token::Token::Exit => {
+                    crate::event::Token::Exit => {
                         tracing::trace!("EXIT");
                         return Ok(());
                     }

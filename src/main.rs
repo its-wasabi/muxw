@@ -1,16 +1,16 @@
 mod backend;
+mod build_info;
 mod compositor;
 mod config;
 mod context;
+mod event;
 mod event_loop;
-mod meta;
 mod renderer;
-mod token;
 mod wayland;
 
-const APP_NAME: &str = meta::get_app_name();
-const APP_NAME_CSTR: &std::ffi::CStr = meta::get_app_name_cstr();
-const APP_VERSION: meta::Version = meta::get_app_version();
+const APP_NAME: &str = build_info::get_app_name();
+const APP_NAME_CSTR: &std::ffi::CStr = build_info::get_app_name_cstr();
+const APP_VERSION: build_info::Version = build_info::get_app_version();
 
 pub const DEFAULT_CONFIG: &str = /* lua */
     r#"

@@ -1,12 +1,12 @@
 pub struct Seat {
-    handle: crate::event_loop::IoHandle<crate::token::Token>,
+    handle: crate::event_loop::IoHandle<crate::event::Token>,
     libseat: std::ptr::NonNull<libseat_sys::libseat>,
-    emitter: *mut crate::event_loop::Emitter<crate::token::Token>,
+    emitter: *mut crate::event_loop::Emitter<crate::event::Token>,
 }
 
 impl Seat {
     pub fn new(
-        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
+        event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         static LISTENER: libseat_sys::libseat_seat_listener = libseat_sys::libseat_seat_listener {
             enable_seat: Some(on_enable_seat),
@@ -33,7 +33,7 @@ impl Seat {
         let handle = match event_loop.register_fd(
             &fd,
             crate::event_loop::Interest::Readable,
-            crate::token::Token::Seat(Event::Dispatch),
+            crate::event::Token::Seat(Event::Dispatch),
         ) {
             Ok(handle) => handle,
             Err(err) => {
@@ -151,16 +151,16 @@ unsafe extern "C" fn on_enable_seat(
     _seat: *mut libseat_sys::libseat,
     emitter: *mut std::ffi::c_void,
 ) {
-    let emitter = unsafe { &*(emitter as *const crate::event_loop::Emitter<crate::token::Token>) };
-    emitter.emit(crate::token::Token::Seat(Event::Enable));
+    let emitter = unsafe { &*(emitter as *const crate::event_loop::Emitter<crate::event::Token>) };
+    emitter.emit(crate::event::Token::Seat(Event::Enable));
 }
 
 unsafe extern "C" fn on_disable_seat(
     _seat: *mut libseat_sys::libseat,
     emitter: *mut std::ffi::c_void,
 ) {
-    let emitter = unsafe { &*(emitter as *const crate::event_loop::Emitter<crate::token::Token>) };
-    emitter.emit(crate::token::Token::Seat(Event::Disable));
+    let emitter = unsafe { &*(emitter as *const crate::event_loop::Emitter<crate::event::Token>) };
+    emitter.emit(crate::event::Token::Seat(Event::Disable));
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

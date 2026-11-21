@@ -1,16 +1,16 @@
-mod keyboards;
-mod pointers;
+mod keyboard;
+mod pointer;
 
 pub(super) struct Seat {
-    keyboards: keyboards::Keyboards,
-    pointers: pointers::Pointers,
+    keyboards: keyboard::Keyboards,
+    pointers: pointer::Pointers,
 }
 
 impl Seat {
     pub(super) fn new() -> Self {
         Self {
-            keyboards: keyboards::Keyboards::new(),
-            pointers: pointers::Pointers::new(),
+            keyboards: keyboard::Keyboards::new(),
+            pointers: pointer::Pointers::new(),
         }
     }
 

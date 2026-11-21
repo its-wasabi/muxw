@@ -8,7 +8,7 @@ const DEVICES_DEFAULT_CAPACITY: usize = 1;
 const OUTPUTS_DEFAULT_CAPACITY: usize = 1;
 
 pub struct Drm {
-    handle: crate::event_loop::IoHandle<crate::token::Token>,
+    handle: crate::event_loop::IoHandle<crate::event::Token>,
     monitor: udev::MonitorSocket,
     seat_handle: crate::backend::session::SeatHandle,
 
@@ -20,7 +20,7 @@ pub struct Drm {
 impl Drm {
     pub fn new(
         seat_handle: crate::backend::session::SeatHandle,
-        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
+        event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let monitor = udev::MonitorBuilder::new()?
             .match_subsystem_devtype("drm", "drm_minor")?
@@ -56,7 +56,7 @@ impl Drm {
     pub fn dispatch(
         &mut self,
         event: Event,
-        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
+        event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         match event {
             Event::Udev => self.handle_udev(self.seat_handle, event_loop),
@@ -67,7 +67,7 @@ impl Drm {
     fn handle_udev(
         &mut self,
         seat_handle: crate::backend::session::SeatHandle,
-        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
+        event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         while let Some(event) = self.monitor.iter().next() {
             match event.event_type() {
@@ -104,7 +104,7 @@ impl Drm {
         &mut self,
         device: &udev::Device,
         seat_handle: crate::backend::session::SeatHandle,
-        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
+        event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
     ) -> Result<device::DeviceKey, error::Error> {
         self.devices
             .try_insert_with_key(|key| device::Device::new(device, seat_handle, key, event_loop))

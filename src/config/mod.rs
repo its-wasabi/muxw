@@ -8,7 +8,7 @@ pub struct Config {}
 impl Config {
     pub fn spawn(
         context: &crate::context::Context,
-        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
+        event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
     ) -> Result<Handle, Box<dyn std::error::Error>> {
         let (command_sender, command_receiver) = crossbeam_channel::unbounded::<Command>();
         let path = context.path.config_file.clone();

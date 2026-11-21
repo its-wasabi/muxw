@@ -121,14 +121,14 @@ pub struct InputEvent<'a> {
 }
 
 pub struct Libinput {
-    handle: crate::event_loop::IoHandle<crate::token::Token>,
+    handle: crate::event_loop::IoHandle<crate::event::Token>,
     libinput: input::Libinput,
     devices: slotmap::SlotMap<DeviceKey, input::Device>,
 }
 
 impl Libinput {
     pub fn new(
-        event_loop: &mut crate::event_loop::EventLoop<crate::token::Token>,
+        event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
         seat_handle: crate::backend::session::SeatHandle,
     ) -> Result<Self, error::Error> {
         let mut libinput = input::Libinput::new_with_udev(LibinputInterface {
@@ -143,7 +143,7 @@ impl Libinput {
         let handle = event_loop.register_fd(
             &libinput.as_fd(),
             crate::event_loop::Interest::Readable,
-            crate::token::Token::Input(Event::Dispatch),
+            crate::event::Token::Input(Event::Dispatch),
         )?;
 
         Ok(Self {
