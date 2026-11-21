@@ -15,11 +15,11 @@ pub struct Compositor {
 }
 
 impl Compositor {
-    pub fn new(context: &crate::context::Context) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(context: &crate::startup::Context) -> Result<Self, Box<dyn std::error::Error>> {
         let mut event_loop = crate::event_loop::EventLoop::new()?;
         let triggered_events = Vec::new();
 
-        let config = crate::config::Config::spawn(context, &mut event_loop)?;
+        let config = crate::config::Service::spawn(context, &mut event_loop)?;
         let seat = crate::backend::session::Seat::new(&mut event_loop)?;
         let renderer = crate::renderer::Renderer::new()?;
         let drm = crate::backend::drm::Drm::new(seat.handle(), &mut event_loop)?;

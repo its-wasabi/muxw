@@ -1,5 +1,5 @@
-#[path = "src/context/cli/domain.rs"]
-mod domain;
+#[path = "src/startup/cli/args.rs"]
+mod args;
 
 use clap::CommandFactory;
 
@@ -31,7 +31,7 @@ fn run_spell_check() {
 
 fn build_shell_completion() -> Result<(), std::io::Error> {
     if let Some(outdir) = std::env::var_os("OUT_DIR") {
-        let mut cmd = domain::Cli::command();
+        let mut cmd = args::Cli::command();
         let bin_name = std::env!("CARGO_PKG_NAME");
 
         let shells = [

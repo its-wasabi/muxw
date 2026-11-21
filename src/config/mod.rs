@@ -1,13 +1,13 @@
-// mod api;
+// mod lua;
 pub mod error;
 
 const ENABLED_LUA_LIBRARIES: mlua::StdLib = mlua::StdLib::ALL_SAFE;
 
-pub struct Config {}
+pub struct Service {}
 
-impl Config {
+impl Service {
     pub fn spawn(
-        context: &crate::context::Context,
+        context: &crate::startup::Context,
         event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
     ) -> Result<Handle, Box<dyn std::error::Error>> {
         let (command_sender, command_receiver) = crossbeam_channel::unbounded::<Command>();

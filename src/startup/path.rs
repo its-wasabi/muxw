@@ -4,12 +4,12 @@ const CONFIG_FILENAME: &str = "config.lua";
 const APP_DIR: &str = env!("CARGO_CRATE_NAME");
 
 #[derive(Debug)]
-pub struct Path {
+pub struct Paths {
     pub config_dir: std::path::PathBuf,
     pub config_file: std::path::PathBuf,
 }
 
-impl Path {
+impl Paths {
     pub fn new(config_override: Option<std::path::PathBuf>) -> Result<Self, super::error::Error> {
         match config_override {
             Some(path) => Self::from_user_path(path),

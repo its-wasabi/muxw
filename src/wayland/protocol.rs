@@ -1,13 +1,13 @@
-pub struct State {}
+pub struct ProtocolState {}
 
-impl State {
+impl ProtocolState {
     pub fn new(_event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>) -> Self {
         Self {}
     }
 }
 
 impl wayland_server::GlobalDispatch<wayland_server::protocol::wl_compositor::WlCompositor, ()>
-    for State
+    for ProtocolState
 {
     fn bind(
         _state: &mut Self,
@@ -22,7 +22,9 @@ impl wayland_server::GlobalDispatch<wayland_server::protocol::wl_compositor::WlC
     }
 }
 
-impl wayland_server::Dispatch<wayland_server::protocol::wl_compositor::WlCompositor, ()> for State {
+impl wayland_server::Dispatch<wayland_server::protocol::wl_compositor::WlCompositor, ()>
+    for ProtocolState
+{
     fn request(
         _state: &mut Self,
         _client: &wayland_server::Client,

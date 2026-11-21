@@ -3,9 +3,9 @@ pub use emitter::Emitter;
 mod io;
 pub use io::Handle as IoHandle;
 pub use io::Interest;
-mod sender;
-pub use sender::LoopClosed;
-pub use sender::Sender;
+mod channel;
+pub use channel::LoopClosed;
+pub use channel::Sender;
 mod timer;
 pub use timer::Handle as TimerHandle;
 pub use timer::TimerMode;
@@ -17,7 +17,7 @@ pub struct EventLoop<T: Clone> {
     sources: std::rc::Rc<io::Sources<T>>,
     timers: timer::Timers<T>,
     emitted: std::rc::Rc<std::cell::RefCell<Vec<T>>>,
-    mailbox: sender::Mailbox<T>,
+    mailbox: channel::Mailbox<T>,
 }
 
 impl<T: Clone> EventLoop<T> {
@@ -27,7 +27,7 @@ impl<T: Clone> EventLoop<T> {
         let sources = std::rc::Rc::new(io::Sources::new(poller.clone()));
         let timers = timer::Timers::new();
         let emitted = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
-        let mailbox = sender::Mailbox::new();
+        let mailbox = channel::Mailbox::new();
 
         Ok(Self {
             poller,

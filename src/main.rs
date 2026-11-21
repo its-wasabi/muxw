@@ -2,10 +2,10 @@ mod backend;
 mod build_info;
 mod compositor;
 mod config;
-mod context;
 mod event;
 mod event_loop;
 mod renderer;
+mod startup;
 mod wayland;
 
 const APP_NAME: &str = build_info::get_app_name();
@@ -23,8 +23,8 @@ print("LUA DONE")
 "#;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let context = context::Context::new()?;
-    let _log_guard = context::logging::init_logging(&context.log_target)?;
+    let context = startup::Context::new()?;
+    let _log_guard = startup::logging::init_logging(&context.log_target)?;
 
     compositor::Compositor::new(&context)
         .inspect_err(|error| {

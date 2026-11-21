@@ -5,17 +5,17 @@ mod path;
 
 #[derive(Debug)]
 pub struct Context {
-    pub cli: cli::domain::Cli,
-    pub path: path::Path,
+    pub cli: cli::args::Cli,
+    pub path: path::Paths,
     pub log_target: logging::LogTarget,
 }
 
 impl Context {
     pub fn new() -> Result<Self, error::Error> {
         use clap::Parser;
-        let cli = cli::domain::Cli::parse();
+        let cli = cli::args::Cli::parse();
         cli.process()?;
-        let path = path::Path::new(cli.config.clone())?;
+        let path = path::Paths::new(cli.config.clone())?;
         let log_target = logging::LogTarget::new(cli.log_to.as_deref())?;
         Ok(Self {
             cli,

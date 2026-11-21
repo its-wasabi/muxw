@@ -2,25 +2,25 @@ use std::os::fd::AsFd;
 
 mod client;
 pub mod error;
-mod state;
+mod protocol;
 
 pub struct Wayland {
     socket_handle: crate::event_loop::IoHandle<crate::event::Token>,
     display_handle: crate::event_loop::IoHandle<crate::event::Token>,
 
-    display: wayland_server::Display<state::State>,
+    display: wayland_server::Display<protocol::ProtocolState>,
     socket: wayland_server::ListeningSocket,
-    state: state::State,
+    state: protocol::ProtocolState,
 }
 
 impl Wayland {
     pub fn new(
-        context: &crate::context::Context,
+        context: &crate::startup::Context,
         event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
     ) -> Result<Self, error::Error> {
         let mut display = wayland_server::Display::new().map_err(error::Error::CreateDisplay)?;
         display.handle().create_global::<
-            state::State,
+            protocol::ProtocolState,
             wayland_server::protocol::wl_compositor::WlCompositor,
             (),
         >(5, ());
@@ -54,7 +54,7 @@ impl Wayland {
         Ok(Self {
             display,
             socket,
-            state: state::State::new(event_loop),
+            state: protocol::ProtocolState::new(event_loop),
 
             socket_handle,
             display_handle,
