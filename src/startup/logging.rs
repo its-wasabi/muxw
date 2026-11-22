@@ -2,6 +2,28 @@ use eyre::WrapErr;
 use std::{fmt::Write, panic};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+pub fn init() -> eyre::Result<()> {
+    eyre::set_hook(Box::new(|_| Box::new(Handler)))?;
+    panics_set_hook();
+
+    let log_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("runtime.log")?;
+
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::sync::Arc::new(log_file))
+                .with_target(true)
+                .with_ansi(false),
+        )
+        .try_init()
+        .wrap_err("failed to install tracing subscriber")?;
+
+    Ok(())
+}
+
 struct Handler;
 
 impl eyre::EyreHandler for Handler {
@@ -27,30 +49,7 @@ impl eyre::EyreHandler for Handler {
     }
 }
 
-pub fn init() -> eyre::Result<()> {
-    eyre::set_hook(Box::new(|_| Box::new(Handler)))?;
-
-    let log_file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("runtime.log")?;
-
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(std::sync::Arc::new(log_file))
-                .with_target(true)
-                .with_ansi(false),
-        )
-        .try_init()
-        .wrap_err("failed to install tracing subscriber")?;
-
-    handle_panics();
-
-    Ok(())
-}
-
-pub fn handle_panics() {
+pub fn panics_set_hook() {
     let default_hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         let payload = info.payload();

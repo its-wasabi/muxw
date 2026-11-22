@@ -8,7 +8,7 @@ pub struct Service {}
 impl Service {
     pub fn spawn(
         context: &crate::startup::Context,
-        event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
+        event_loop: &mut crate::event_loop::EventLoop<crate::Event>,
     ) -> eyre::Result<Handle> {
         let (command_sender, command_receiver) = crossbeam_channel::unbounded::<Command>();
         let path = context.path.config.file.clone();
@@ -259,6 +259,12 @@ pub struct Handle {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
     Test123,
+}
+
+impl Into<crate::Event> for Event {
+    fn into(self) -> crate::Event {
+        crate::Event::Config(self)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

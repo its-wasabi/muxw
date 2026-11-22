@@ -7,8 +7,8 @@ pub struct Compositor {
     config: crate::config::Handle,
     input: crate::backend::input::Libinput,
 
-    event_loop: crate::event_loop::EventLoop<crate::event::Token>,
-    triggered_events: Vec<crate::event::Token>,
+    event_loop: crate::event_loop::EventLoop<crate::Event>,
+    triggered_events: Vec<crate::Event>,
 
     // NOTE: Must be dropped after other components since it handles device close calls
     seat: crate::backend::session::Seat,
@@ -27,10 +27,6 @@ impl Compositor {
 
         let wayland = crate::wayland::Wayland::new(context, &mut event_loop)?;
 
-        todo!();
-
-        tracing::trace!("ALL INIT");
-
         Ok(Self {
             wayland,
             drm,
@@ -48,12 +44,11 @@ impl Compositor {
     pub fn run(mut self) -> eyre::Result<()> {
         loop {
             self.event_loop.dispatch(&mut self.triggered_events)?;
+            for event in self.triggered_events.drain(..) {
+                let _span_guard = tracing::debug_span!("event", ?event).entered();
 
-            for token in self.triggered_events.drain(..) {
-                let _span_guard = tracing::debug_span!("event", ?token).entered();
-
-                match token {
-                    crate::event::Token::Seat(event) => match event {
+                match event {
+                    crate::Event::Session(event) => match event {
                         crate::backend::session::Event::Dispatch => {
                             if let Err(error) = self.seat.dispatch() {
                                 tracing::error!(?error, "Failed to dispatch libseat seat");
@@ -80,7 +75,7 @@ impl Compositor {
                         }
                     },
 
-                    crate::event::Token::Input(crate::backend::input::Event::Dispatch) => {
+                    crate::Event::Input(crate::backend::input::Event::Dispatch) => {
                         self.input.dispatch(|event| {
                             if let crate::backend::input::InputEvent {
                                 kind:
@@ -97,12 +92,10 @@ impl Compositor {
                                 let f12 = u32::from(evdev::KeyCode::KEY_F12.code());
 
                                 if pressed {
-                                    tracing::trace!("KEY PRESS: {keycode:?}");
                                     match keycode {
-                                        keycode if keycode == esc => self
-                                            .event_loop
-                                            .emitter()
-                                            .emit(crate::event::Token::Exit),
+                                        keycode if keycode == esc => {
+                                            self.event_loop.emitter().emit(crate::Event::Exit)
+                                        }
 
                                         keycode if (f1..=f12).contains(&keycode) => {
                                             let vt = (keycode - f1 + 1) as i32;
@@ -123,19 +116,19 @@ impl Compositor {
                         })?;
                     }
 
-                    crate::event::Token::Drm(event) => {
+                    crate::Event::Drm(event) => {
                         self.drm.dispatch(event, &mut self.event_loop)?;
                     }
 
-                    crate::event::Token::Wayland(event) => {
+                    crate::Event::Wayland(event) => {
                         self.wayland.dispatch(event, &self.event_loop)?;
                     }
 
-                    crate::event::Token::Config(command) => {
+                    crate::Event::Config(command) => {
                         eprintln!("Apply config logic here");
                     }
 
-                    crate::event::Token::Exit => {
+                    crate::Event::Exit => {
                         tracing::trace!("EXIT");
                         return Ok(());
                     }

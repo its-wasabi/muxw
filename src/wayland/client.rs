@@ -1,5 +1,5 @@
 pub struct Client {
-    pub event_sender: crate::event_loop::Sender<crate::event::Token>,
+    pub event_sender: crate::event_loop::Sender<crate::Event>,
 }
 
 impl wayland_server::backend::ClientData for Client {
@@ -12,7 +12,11 @@ impl wayland_server::backend::ClientData for Client {
         client_id: wayland_server::backend::ClientId,
         _reason: wayland_server::backend::DisconnectReason,
     ) {
-        self.event_sender
-            .send(super::Event::ClientDisconnected(client_id));
+        if let Err(error) = self
+            .event_sender
+            .send(super::Event::ClientDisconnected(client_id))
+        {
+            tracing::error!(?error);
+        }
     }
 }

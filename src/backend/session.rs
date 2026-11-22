@@ -1,15 +1,13 @@
 use eyre::Context;
 
 pub struct Seat {
-    handle: crate::event_loop::IoHandle<crate::event::Token>,
+    handle: crate::event_loop::IoHandle<crate::Event>,
     libseat: std::ptr::NonNull<libseat_sys::libseat>,
-    emitter: *mut crate::event_loop::Emitter<crate::event::Token>,
+    emitter: *mut crate::event_loop::Emitter<crate::Event>,
 }
 
 impl Seat {
-    pub fn new(
-        event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
-    ) -> eyre::Result<Self> {
+    pub fn new(event_loop: &mut crate::event_loop::EventLoop<crate::Event>) -> eyre::Result<Self> {
         static LISTENER: libseat_sys::libseat_seat_listener = libseat_sys::libseat_seat_listener {
             enable_seat: Some(on_enable_seat),
             disable_seat: Some(on_disable_seat),
@@ -36,7 +34,7 @@ impl Seat {
             .register_fd(
                 &fd,
                 crate::event_loop::Interest::Readable,
-                crate::event::Token::Seat(Event::Dispatch),
+                crate::Event::Session(Event::Dispatch),
             )
             .wrap_err("failed to register libseat fd in event loop")
         {
@@ -163,16 +161,16 @@ unsafe extern "C" fn on_enable_seat(
     _seat: *mut libseat_sys::libseat,
     emitter: *mut std::ffi::c_void,
 ) {
-    let emitter = unsafe { &*(emitter as *const crate::event_loop::Emitter<crate::event::Token>) };
-    emitter.emit(crate::event::Token::Seat(Event::Enable));
+    let emitter = unsafe { &*(emitter as *const crate::event_loop::Emitter<crate::Event>) };
+    emitter.emit(crate::Event::Session(Event::Enable));
 }
 
 unsafe extern "C" fn on_disable_seat(
     _seat: *mut libseat_sys::libseat,
     emitter: *mut std::ffi::c_void,
 ) {
-    let emitter = unsafe { &*(emitter as *const crate::event_loop::Emitter<crate::event::Token>) };
-    emitter.emit(crate::event::Token::Seat(Event::Disable));
+    let emitter = unsafe { &*(emitter as *const crate::event_loop::Emitter<crate::Event>) };
+    emitter.emit(crate::Event::Session(Event::Disable));
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -180,4 +178,10 @@ pub enum Event {
     Dispatch,
     Enable,
     Disable,
+}
+
+impl Into<crate::Event> for Event {
+    fn into(self) -> crate::Event {
+        crate::Event::Session(self)
+    }
 }

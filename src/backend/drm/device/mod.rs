@@ -14,7 +14,7 @@ slotmap::new_key_type! {
 
 pub(super) struct Device {
     card: card::Card,
-    handle: crate::event_loop::IoHandle<crate::event::Token>,
+    handle: crate::event_loop::IoHandle<crate::Event>,
 
     devnum: u64,
     resources: drm::control::ResourceHandles,
@@ -25,7 +25,7 @@ impl Device {
         device: &udev::Device,
         seat_handle: crate::backend::session::SeatHandle,
         key: DeviceKey,
-        event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
+        event_loop: &mut crate::event_loop::EventLoop<crate::Event>,
     ) -> eyre::Result<Option<Self>> {
         let (Some(devnum), Some(devnode)) = (device.devnum(), device.devnode()) else {
             return Ok(None);

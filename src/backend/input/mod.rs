@@ -120,14 +120,14 @@ pub struct InputEvent<'a> {
 }
 
 pub struct Libinput {
-    handle: crate::event_loop::IoHandle<crate::event::Token>,
+    handle: crate::event_loop::IoHandle<crate::Event>,
     libinput: input::Libinput,
     devices: slotmap::SlotMap<DeviceKey, input::Device>,
 }
 
 impl Libinput {
     pub fn new(
-        event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
+        event_loop: &mut crate::event_loop::EventLoop<crate::Event>,
         seat_handle: crate::backend::session::SeatHandle,
     ) -> eyre::Result<Self> {
         let mut libinput = input::Libinput::new_with_udev(LibinputInterface {
@@ -143,7 +143,7 @@ impl Libinput {
             .register_fd(
                 &libinput.as_fd(),
                 crate::event_loop::Interest::Readable,
-                crate::event::Token::Input(Event::Dispatch),
+                crate::Event::Input(Event::Dispatch),
             )
             .wrap_err("failed to register libinput fd in event loop")?;
 
@@ -326,4 +326,10 @@ fn get_key(device: &input::Device) -> DeviceKey {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
     Dispatch,
+}
+
+impl Into<crate::Event> for Event {
+    fn into(self) -> crate::Event {
+        crate::Event::Input(self)
+    }
 }

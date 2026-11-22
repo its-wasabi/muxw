@@ -36,3 +36,17 @@ fn main() -> eyre::Result<()> {
 
     Ok(())
 }
+
+#[allow(unused)]
+const EVENT_TOO_BIG: () = assert!(std::mem::size_of::<Event>() <= 48);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Event {
+    Session(crate::backend::session::Event),
+    Input(crate::backend::input::Event),
+    Drm(crate::backend::drm::Event),
+    Wayland(crate::wayland::Event),
+    Config(crate::config::Event),
+
+    Exit,
+}
