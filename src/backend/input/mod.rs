@@ -1,5 +1,4 @@
-mod error;
-
+use eyre::Context;
 use input::{
     AsRaw,
     event::{
@@ -130,7 +129,7 @@ impl Libinput {
     pub fn new(
         event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
         seat_handle: crate::backend::session::SeatHandle,
-    ) -> Result<Self, error::Error> {
+    ) -> eyre::Result<Self> {
         let mut libinput = input::Libinput::new_with_udev(LibinputInterface {
             seat_handle,
             devices: std::collections::HashMap::with_capacity(DEFAULT_DEVICES_CAPACITY),
@@ -138,13 +137,15 @@ impl Libinput {
 
         libinput
             .udev_assign_seat("seat0")
-            .map_err(|()| error::Error::AssignSeat)?;
+            .map_err(|()| eyre::eyre!("failed to assign udev seat 'seat0' to libinput"))?;
 
-        let handle = event_loop.register_fd(
-            &libinput.as_fd(),
-            crate::event_loop::Interest::Readable,
-            crate::event::Token::Input(Event::Dispatch),
-        )?;
+        let handle = event_loop
+            .register_fd(
+                &libinput.as_fd(),
+                crate::event_loop::Interest::Readable,
+                crate::event::Token::Input(Event::Dispatch),
+            )
+            .wrap_err("failed to register libinput fd in event loop")?;
 
         Ok(Self {
             libinput,
@@ -157,12 +158,16 @@ impl Libinput {
         self.libinput.suspend();
     }
 
-    pub fn resume(&mut self) -> Result<(), error::Error> {
-        self.libinput.resume().map_err(|()| error::Error::Resume)
+    pub fn resume(&mut self) -> eyre::Result<()> {
+        self.libinput
+            .resume()
+            .map_err(|()| eyre::eyre!("failed to resume libinput"))
     }
 
-    pub fn dispatch(&mut self, mut on_event: impl FnMut(InputEvent)) -> Result<(), error::Error> {
-        self.libinput.dispatch()?;
+    pub fn dispatch(&mut self, mut on_event: impl FnMut(InputEvent)) -> eyre::Result<()> {
+        self.libinput
+            .dispatch()
+            .wrap_err("failed to dispatch libinput events")?;
 
         for event in &mut self.libinput {
             match event {

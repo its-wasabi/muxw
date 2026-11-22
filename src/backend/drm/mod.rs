@@ -1,8 +1,9 @@
 #![allow(unused)]
 #![allow(clippy::todo)]
 
+use eyre::Context;
+
 mod device;
-pub mod error;
 
 const DEVICES_DEFAULT_CAPACITY: usize = 1;
 const OUTPUTS_DEFAULT_CAPACITY: usize = 1;
@@ -21,18 +22,32 @@ impl Drm {
     pub fn new(
         seat_handle: crate::backend::session::SeatHandle,
         event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        let monitor = udev::MonitorBuilder::new()?
-            .match_subsystem_devtype("drm", "drm_minor")?
-            .listen()?;
-        let handle =
-            event_loop.register_fd(&monitor, crate::event_loop::Interest::Readable, Event::Udev)?;
+    ) -> eyre::Result<Self> {
+        let monitor = udev::MonitorBuilder::new()
+            .wrap_err("failed to create udev monitor builder")?
+            .match_subsystem_devtype("drm", "drm_minor")
+            .wrap_err("failed to filter udev monitor for drm_minor")?
+            .listen()
+            .wrap_err("failed to start udev monitor")?;
 
-        let mut enumerator = udev::Enumerator::new()?;
-        enumerator.match_subsystem("drm")?;
-        enumerator.match_property("DEVTYPE", "drm_minor")?;
-        enumerator.match_sysname("card[0-9]*")?;
-        enumerator.match_is_initialized()?;
+        let handle = event_loop
+            .register_fd(&monitor, crate::event_loop::Interest::Readable, Event::Udev)
+            .wrap_err("failed to register udev monitor in event loop")?;
+
+        let mut enumerator =
+            udev::Enumerator::new().wrap_err("failed to create udev enumerator")?;
+        enumerator
+            .match_subsystem("drm")
+            .wrap_err("failed to match drm subsystem")?;
+        enumerator
+            .match_property("DEVTYPE", "drm_minor")
+            .wrap_err("failed to match drm_minor devtype")?;
+        enumerator
+            .match_sysname("card[0-9]*")
+            .wrap_err("failed to match card sysname")?;
+        enumerator
+            .match_is_initialized()
+            .wrap_err("failed to match initialized udev devices")?;
 
         let mut drm = Self {
             handle,
@@ -44,8 +59,13 @@ impl Drm {
             devices: slotmap::SlotMap::with_capacity_and_key(DEVICES_DEFAULT_CAPACITY),
         };
 
-        for udev_device in enumerator.scan_devices()? {
-            if let Err(error) = drm.add_device(&udev_device, seat_handle.clone(), event_loop) {
+        let devices = enumerator
+            .scan_devices()
+            .wrap_err("failed to scan udev DRM devices")?;
+
+        for udev_device in devices {
+            let seat_handle = drm.seat_handle.clone();
+            if let Err(error) = drm.add_device(&udev_device, seat_handle, event_loop) {
                 tracing::error!(?error);
             }
         }
@@ -57,7 +77,7 @@ impl Drm {
         &mut self,
         event: Event,
         event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> eyre::Result<()> {
         match event {
             Event::Udev => self.handle_udev(self.seat_handle, event_loop),
             Event::Device(key) => self.handle_device(key),
@@ -68,7 +88,7 @@ impl Drm {
         &mut self,
         seat_handle: crate::backend::session::SeatHandle,
         event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> eyre::Result<()> {
         while let Some(event) = self.monitor.iter().next() {
             match event.event_type() {
                 udev::EventType::Add => {
@@ -92,7 +112,7 @@ impl Drm {
         Ok(())
     }
 
-    fn handle_device(&mut self, key: device::DeviceKey) -> Result<(), Box<dyn std::error::Error>> {
+    fn handle_device(&mut self, key: device::DeviceKey) -> eyre::Result<()> {
         let Some(entry) = self.devices.get(key) else {
             return Ok(());
         };
@@ -105,13 +125,20 @@ impl Drm {
         device: &udev::Device,
         seat_handle: crate::backend::session::SeatHandle,
         event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
-    ) -> Result<device::DeviceKey, error::Error> {
+    ) -> eyre::Result<Option<device::DeviceKey>> {
         self.devices
-            .try_insert_with_key(|key| device::Device::new(device, seat_handle, key, event_loop))
+            .try_insert_with_key(|key| {
+                device::Device::new(device, seat_handle, key, event_loop)?.ok_or(None)
+            })
+            .map(Some)
+            .or_else(|err| err.map_or(Ok(None), Err))
     }
 
-    fn remove_device(&mut self, device: &udev::Device) -> Result<(), error::Error> {
-        let devnum = device.devnum().ok_or(error::Error::NotPrimaryCard)?;
+    fn remove_device(&mut self, device: &udev::Device) -> eyre::Result<()> {
+        let Some(devnum) = device.devnum() else {
+            return Ok(());
+        };
+
         if let Some(key) = self
             .devices
             .iter()
@@ -124,7 +151,7 @@ impl Drm {
         Ok(())
     }
 
-    pub fn resume(&mut self) -> Result<(), error::Error> {
+    pub fn resume(&mut self) -> eyre::Result<()> {
         self.active = true;
 
         for device in self.devices.values_mut() {
@@ -134,7 +161,7 @@ impl Drm {
         Ok(())
     }
 
-    pub fn suspend(&mut self) -> Result<(), error::Error> {
+    pub fn suspend(&mut self) -> eyre::Result<()> {
         self.active = false;
         Ok(())
     }

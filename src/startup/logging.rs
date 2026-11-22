@@ -1,109 +1,99 @@
-#[derive(Debug)]
-pub enum LogTarget {
-    Stdout,
-    Stderr,
-    File(std::path::PathBuf),
-}
+use eyre::WrapErr;
+use std::{fmt::Write, panic};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-impl LogTarget {
-    pub fn new(cli_log_to: Option<&str>) -> Result<Self, super::error::Error> {
-        let path = match cli_log_to {
-            Some("stdout") => return Ok(Self::Stdout),
-            Some("stderr") => return Ok(Self::Stderr),
-            Some(path) => std::path::PathBuf::from(path),
-            None => std::path::PathBuf::from("~/.local/share/muxw/runtime.log"),
-        };
+struct Handler;
 
-        let path = super::to_absolute(super::expand_tilde(path)?)?;
-        Ok(Self::File(path))
+impl eyre::EyreHandler for Handler {
+    fn debug(
+        &self,
+        error: &(dyn std::error::Error + 'static),
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(f, "{error}")?;
+
+        let mut causes = 0;
+        let mut source = error.source();
+        while let Some(cause) = source {
+            write!(f, "\n    {causes}: {cause}")?;
+            causes += 1;
+            source = cause.source();
+        }
+
+        if causes > 0 {
+            writeln!(f)?;
+        }
+        Ok(())
     }
 }
 
-#[derive(Clone, Copy)]
-enum DumpTarget {
-    Stdout,
-    Stderr,
-}
+pub fn init() -> eyre::Result<()> {
+    eyre::set_hook(Box::new(|_| Box::new(Handler)))?;
 
-struct DumpData {
-    path: std::path::PathBuf,
-    target: DumpTarget,
-}
-
-pub struct LoggerGuard {
-    worker_guard: Option<tracing_appender::non_blocking::WorkerGuard>,
-    dump: Option<DumpData>,
-}
-
-impl Drop for LoggerGuard {
-    fn drop(&mut self) {
-        // Dropping the worker guard flushes the non-blocking writer. It has to
-        // happen before the file is read back, and fields are only dropped
-        // after this function returns.
-        drop(self.worker_guard.take());
-
-        let Some(dump) = self.dump.take() else {
-            return;
-        };
-
-        // Nothing sensible to do about IO errors while shutting down.
-        if let Ok(mut file) = std::fs::File::open(&dump.path) {
-            let _ = match dump.target {
-                DumpTarget::Stdout => std::io::copy(&mut file, &mut std::io::stdout()),
-                DumpTarget::Stderr => std::io::copy(&mut file, &mut std::io::stderr()),
-            };
-        }
-        let _ = std::fs::remove_file(&dump.path);
-    }
-}
-
-pub fn init_logging(target: &LogTarget) -> Result<LoggerGuard, super::error::Error> {
-    let (path, dump_target) = match target {
-        LogTarget::Stdout => (temp_path(), Some(DumpTarget::Stdout)),
-        LogTarget::Stderr => (temp_path(), Some(DumpTarget::Stderr)),
-        LogTarget::File(path) => {
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).map_err(|source| {
-                    super::error::Error::CreateLogDir {
-                        path: parent.to_path_buf(),
-                        source,
-                    }
-                })?;
-            }
-            (path.clone(), None)
-        }
-    };
-
-    let file = open_log_file(&path)?;
-    let (non_blocking, worker_guard) = tracing_appender::non_blocking(file);
-
-    tracing_subscriber::fmt()
-        .with_max_level(tracing_subscriber::filter::LevelFilter::TRACE)
-        .with_writer(non_blocking)
-        .with_ansi(dump_target.is_some())
-        .compact()
-        .try_init()
-        .map_err(super::error::Error::InitLogger)?;
-
-    Ok(LoggerGuard {
-        worker_guard: Some(worker_guard),
-        dump: dump_target.map(|target| DumpData { path, target }),
-    })
-}
-
-fn temp_path() -> std::path::PathBuf {
-    let dir = super::non_empty_env("XDG_RUNTIME_DIR")
-        .map_or_else(std::env::temp_dir, std::path::PathBuf::from);
-    dir.join(format!("muxw-log-dump-{}.tmp", std::process::id()))
-}
-
-fn open_log_file(path: &std::path::Path) -> Result<std::fs::File, super::error::Error> {
-    std::fs::OpenOptions::new()
+    let log_file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(path)
-        .map_err(|source| super::error::Error::OpenLogFile {
-            path: path.to_path_buf(),
-            source,
-        })
+        .open("runtime.log")?;
+
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::sync::Arc::new(log_file))
+                .with_target(true)
+                .with_ansi(false),
+        )
+        .try_init()
+        .wrap_err("failed to install tracing subscriber")?;
+
+    handle_panics();
+
+    Ok(())
+}
+
+pub fn handle_panics() {
+    let default_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+        let payload = info.payload();
+        let message = payload
+            .downcast_ref::<&str>()
+            .copied()
+            .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+            .unwrap_or("<non-string panic payload>");
+        let location = info
+            .location()
+            .map_or_else(|| "<unknown>".to_owned(), std::string::ToString::to_string);
+        let thread = std::thread::current();
+        let thread = thread.name().unwrap_or("<unnamed>");
+
+        tracing::error!(
+            "panic: {message} at {location} [thread {thread}]{}",
+            backtrace()
+        );
+
+        default_hook(info);
+    }));
+}
+
+fn backtrace() -> String {
+    let mut out = String::new();
+    let mut n = 0;
+    backtrace::trace(|frame| {
+        backtrace::resolve_frame(frame, |sym| {
+            let (Some(name), Some(file), Some(line)) = (sym.name(), sym.filename(), sym.lineno())
+            else {
+                return;
+            };
+            let Ok(file) = file.strip_prefix(env!("CARGO_MANIFEST_DIR")) else {
+                return;
+            };
+            let name = format!("{name:#}");
+            if name.contains("panic_hook") {
+                return;
+            }
+            let _ = write!(out, "\n    {n}: {name} ({}:{line})", file.display());
+            n += 1;
+        });
+        true
+    });
+    out
 }

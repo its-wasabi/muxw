@@ -1,3 +1,5 @@
+use eyre::Context;
+
 #[cfg(debug_assertions)]
 const INSTANCE_LAYERS: &[*const std::ffi::c_char] =
     &crate::build_info::as_const_pointers([c"VK_LAYER_KHRONOS_validation"]);
@@ -15,7 +17,7 @@ pub(super) struct Instance {
 }
 
 impl Instance {
-    pub(super) fn new(entry: &ash::Entry) -> Result<Self, Box<dyn std::error::Error>> {
+    pub(super) fn new(entry: &ash::Entry) -> eyre::Result<Self> {
         let application_info = ash::vk::ApplicationInfo::default()
             .api_version(super::API_VERSION)
             .application_name(crate::APP_NAME_CSTR)
@@ -29,7 +31,11 @@ impl Instance {
             .enabled_extension_names(INSTANCE_EXTENSIONS)
             .flags(create_flags);
 
-        let instance = unsafe { entry.create_instance(&create_info, None)? };
+        let instance = unsafe {
+            entry
+                .create_instance(&create_info, None)
+                .wrap_err("failed to crate vulkan instance")?
+        };
 
         Ok(Self { inner: instance })
     }

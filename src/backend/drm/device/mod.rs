@@ -2,6 +2,7 @@ mod card;
 
 use drm::Device as DRMDevice;
 use drm::control::Device as DRMControlDevice;
+use eyre::Context;
 use std::os::fd::AsFd;
 
 const DRM_MAJOR: u32 = 226;
@@ -25,36 +26,59 @@ impl Device {
         seat_handle: crate::backend::session::SeatHandle,
         key: DeviceKey,
         event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
-    ) -> Result<Self, super::error::Error> {
+    ) -> eyre::Result<Option<Self>> {
         let (Some(devnum), Some(devnode)) = (device.devnum(), device.devnode()) else {
-            return Err(super::error::Error::NotPrimaryCard);
+            return Ok(None);
+        };
+        let Some(card) = card::Card::new(devnum, devnode, seat_handle)? else {
+            return Ok(None);
         };
 
-        let card = card::Card::new(devnum, devnode, seat_handle)?;
-        let handle = event_loop.register_fd(
-            &card.as_fd(),
-            crate::event_loop::Interest::Readable,
-            super::Event::Device(key),
-        )?;
+        let handle = event_loop
+            .register_fd(
+                &card.as_fd(),
+                crate::event_loop::Interest::Readable,
+                super::Event::Device(key),
+            )
+            .wrap_err_with(|| {
+                format!(
+                    "failed to register DRM fd for {} in event loop",
+                    devnode.display()
+                )
+            })?;
 
-        let resources = card.resource_handles()?;
+        let resources = card.resource_handles().wrap_err_with(|| {
+            format!(
+                "failed to query DRM resource handles on {}",
+                devnode.display()
+            )
+        })?;
 
-        for &connector in &resources.connectors {
-            let connector = card.get_connector(connector, false)?;
+        for &connector_handle in &resources.connectors {
+            let connector = card
+                .get_connector(connector_handle, false)
+                .wrap_err_with(|| {
+                    format!(
+                        "failed to query connector {:?} on {}",
+                        connector_handle,
+                        devnode.display()
+                    )
+                })?;
+
             if connector.state() == drm::control::connector::State::Connected {
                 tracing::trace!("{:?} Connected", connector.interface());
             }
         }
 
-        Ok(Self {
+        Ok(Some(Self {
             card,
             handle,
             devnum,
             resources,
-        })
+        }))
     }
 
-    pub(super) const fn resume(&mut self) -> Result<(), super::error::Error> {
+    pub(super) const fn resume(&mut self) -> eyre::Result<()> {
         todo!()
     }
 
@@ -67,7 +91,7 @@ impl Device {
 struct Card(std::fs::File);
 
 impl Card {
-    fn new(path: &std::path::Path) -> Result<Self, super::error::Error> {
+    fn new(path: &std::path::Path) -> eyre::Result<Self> {
         let file = std::fs::OpenOptions::new()
             .write(true)
             .read(true)

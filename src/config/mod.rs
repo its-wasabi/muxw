@@ -9,9 +9,9 @@ impl Service {
     pub fn spawn(
         context: &crate::startup::Context,
         event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
-    ) -> Result<Handle, Box<dyn std::error::Error>> {
+    ) -> eyre::Result<Handle> {
         let (command_sender, command_receiver) = crossbeam_channel::unbounded::<Command>();
-        let path = context.path.config_file.clone();
+        let path = context.path.config.file.clone();
 
         std::thread::Builder::new()
             .name(String::from("muxw-config"))

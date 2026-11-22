@@ -1,8 +1,8 @@
-use std::mem::ManuallyDrop;
 use std::os::fd::{AsFd, AsRawFd};
 
 use drm::Device as DRMDevice;
 use drm::control::Device as DRMControlDevice;
+use eyre::Context;
 
 const DRM_MAJOR: u32 = 226;
 const MAX_PRIMARY_MINOR: u32 = 64;
@@ -17,20 +17,32 @@ impl Card {
         devnum: u64,
         devnode: &std::path::Path,
         seat_handle: crate::backend::session::SeatHandle,
-    ) -> Result<Self, crate::backend::drm::error::Error> {
+    ) -> eyre::Result<Option<Self>> {
         if !is_primary_card(devnum) {
-            return Err(crate::backend::drm::error::Error::NotPrimaryCard);
+            return Ok(None);
         }
 
         let card = Self {
-            device: seat_handle.open_device(devnode)?,
+            device: seat_handle
+                .open_device(devnode)
+                .with_context(|| format!("failed to open DRM device {}", devnode.display()))?,
             seat_handle,
         };
 
-        card.set_client_capability(drm::ClientCapability::UniversalPlanes, true)?;
-        card.set_client_capability(drm::ClientCapability::Atomic, true)?;
+        card.set_client_capability(drm::ClientCapability::UniversalPlanes, true)
+            .wrap_err_with(|| {
+                format!("failed to enable UniversalPlanes on {}", devnode.display())
+            })?;
 
-        Ok(card)
+        card.set_client_capability(drm::ClientCapability::Atomic, true)
+            .wrap_err_with(|| {
+                format!(
+                    "failed to enable Atomic modesetting on {}",
+                    devnode.display()
+                )
+            })?;
+
+        Ok(Some(card))
     }
 }
 

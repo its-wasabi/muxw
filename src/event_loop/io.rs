@@ -1,3 +1,5 @@
+use eyre::Context;
+
 const DEFAULT_CAPACITY: usize = 32;
 
 slotmap::new_key_type! {
@@ -83,7 +85,7 @@ impl<T: Clone> super::EventLoop<T> {
         source: S,
         interest: Interest,
         token: impl Into<T>,
-    ) -> Result<Handle<T>, std::io::Error> {
+    ) -> eyre::Result<Handle<T>> {
         let fd = source.as_fd().try_clone_to_owned()?;
         let mode = polling::PollMode::Edge;
         let io_key: IoKey = self.sources.insert(token.into());
@@ -94,9 +96,13 @@ impl<T: Clone> super::EventLoop<T> {
             Interest::Both => polling::Event::all(raw_key),
         };
 
-        if let Err(error) = unsafe { self.poller.add_with_mode(&fd, interest, mode) } {
+        if let Err(error) = unsafe {
+            self.poller
+                .add_with_mode(&fd, interest, mode)
+                .wrap_err("Failed to register some shit")
+        } {
             self.sources.remove(io_key);
-            tracing::error!(?error, "failed to add io source to poller");
+            tracing::error!(?error);
             return Err(error);
         }
 

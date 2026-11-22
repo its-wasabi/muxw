@@ -15,7 +15,7 @@ pub struct Compositor {
 }
 
 impl Compositor {
-    pub fn new(context: &crate::startup::Context) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(context: &crate::startup::Context) -> eyre::Result<Self> {
         let mut event_loop = crate::event_loop::EventLoop::new()?;
         let triggered_events = Vec::new();
 
@@ -26,6 +26,8 @@ impl Compositor {
         let input = crate::backend::input::Libinput::new(&mut event_loop, seat.handle())?;
 
         let wayland = crate::wayland::Wayland::new(context, &mut event_loop)?;
+
+        todo!();
 
         tracing::trace!("ALL INIT");
 
@@ -43,7 +45,7 @@ impl Compositor {
         })
     }
 
-    pub fn run(mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn run(mut self) -> eyre::Result<()> {
         loop {
             self.event_loop.dispatch(&mut self.triggered_events)?;
 

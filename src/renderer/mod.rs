@@ -5,7 +5,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new() -> eyre::Result<Self> {
         Ok(Self {
             context: context::Context::new()?,
         })

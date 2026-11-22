@@ -17,8 +17,9 @@ pub(super) struct Context {
 }
 
 impl Context {
-    pub(super) fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let entry = unsafe { ash::Entry::load()? };
+    pub(super) fn new() -> eyre::Result<Self> {
+        use eyre::Context;
+        let entry = unsafe { ash::Entry::load().wrap_err("failed to create vulkan entry")? };
         let instance = instance::Instance::new(&entry)?;
 
         Ok(Self {

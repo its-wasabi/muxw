@@ -1,7 +1,7 @@
+use eyre::WrapErr;
 use std::os::fd::AsFd;
 
 mod client;
-pub mod error;
 mod protocol;
 
 pub struct Wayland {
@@ -17,8 +17,9 @@ impl Wayland {
     pub fn new(
         context: &crate::startup::Context,
         event_loop: &mut crate::event_loop::EventLoop<crate::event::Token>,
-    ) -> Result<Self, error::Error> {
-        let mut display = wayland_server::Display::new().map_err(error::Error::CreateDisplay)?;
+    ) -> eyre::Result<Self> {
+        let mut display =
+            wayland_server::Display::new().wrap_err("failed to create Wayland display")?;
         display.handle().create_global::<
             protocol::ProtocolState,
             wayland_server::protocol::wl_compositor::WlCompositor,
@@ -26,14 +27,10 @@ impl Wayland {
         >(5, ());
 
         let socket = match &context.cli.socket {
-            Some(name) => wayland_server::ListeningSocket::bind(name).map_err(|source| {
-                error::Error::BindSocket {
-                    name: name.clone(),
-                    source: Box::new(source),
-                }
-            })?,
+            Some(name) => wayland_server::ListeningSocket::bind(name)
+                .wrap_err_with(|| format!("failed to bind Wayland socket '{name}'"))?,
             None => wayland_server::ListeningSocket::bind_auto("wayland", 0..=100)
-                .map_err(|source| error::Error::BindAutoSocket(Box::new(source)))?,
+                .wrap_err("failed to auto-bind Wayland socket")?,
         };
 
         let socket_handle = event_loop
@@ -42,14 +39,15 @@ impl Wayland {
                 crate::event_loop::Interest::Readable,
                 Event::Socket,
             )
-            .map_err(error::Error::RegisterSocket)?;
+            .wrap_err("failed to register Wayland socket in event loop")?;
+
         let display_handle = event_loop
             .register_fd(
                 &display.backend().poll_fd().as_fd(),
                 crate::event_loop::Interest::Readable,
                 Event::Display,
             )
-            .map_err(error::Error::RegisterDisplay)?;
+            .wrap_err("failed to register Wayland display in event loop")?;
 
         Ok(Self {
             display,
@@ -65,7 +63,7 @@ impl Wayland {
         &mut self,
         event: Event,
         event_loop: &crate::event_loop::EventLoop<crate::event::Token>,
-    ) -> Result<(), error::Error> {
+    ) -> eyre::Result<()> {
         match event {
             Event::Socket => self.accept_clients(event_loop),
             Event::Display => self.dispatch_clients(),
@@ -79,10 +77,14 @@ impl Wayland {
     fn accept_clients(
         &self,
         event_loop: &crate::event_loop::EventLoop<crate::event::Token>,
-    ) -> Result<(), error::Error> {
+    ) -> eyre::Result<()> {
         // The socket is registered edge-triggered, so every pending connection
         // has to be drained now: no further wakeup comes for ones left queued.
-        while let Some(stream) = self.socket.accept().map_err(error::Error::AcceptClient)? {
+        while let Some(stream) = self
+            .socket
+            .accept()
+            .wrap_err("failed to accept Wayland client")?
+        {
             let mut display_handle = self.display.handle();
             let client_data = client::Client {
                 event_sender: event_loop.sender(),
@@ -90,7 +92,7 @@ impl Wayland {
 
             let client = display_handle
                 .insert_client(stream, std::sync::Arc::new(client_data))
-                .map_err(error::Error::InsertClient)?;
+                .wrap_err("failed to insert Wayland client")?;
 
             match client.get_credentials(&display_handle) {
                 Ok(credentials) => tracing::info!(
@@ -108,14 +110,14 @@ impl Wayland {
         Ok(())
     }
 
-    fn dispatch_clients(&mut self) -> Result<(), error::Error> {
+    fn dispatch_clients(&mut self) -> eyre::Result<()> {
         tracing::trace!("Dispatching Wayland display clients");
         self.display
             .dispatch_clients(&mut self.state)
-            .map_err(error::Error::DispatchClients)?;
+            .wrap_err("failed to dispatch Wayland clients")?;
         self.display
             .flush_clients()
-            .map_err(error::Error::FlushClients)
+            .wrap_err("failed to flush Wayland clients")
     }
 }
 
