@@ -1,13 +1,13 @@
 use eyre::Context;
 
 pub struct Seat {
-    handle: crate::event_loop::IoHandle<crate::Event>,
+    handle: evl::IoHandle<crate::Event>,
     libseat: std::ptr::NonNull<libseat_sys::libseat>,
-    emitter: *mut crate::event_loop::Emitter<crate::Event>,
+    emitter: *mut evl::Emitter<crate::Event>,
 }
 
 impl Seat {
-    pub fn new(event_loop: &mut crate::event_loop::EventLoop<crate::Event>) -> eyre::Result<Self> {
+    pub fn new(event_loop: &mut evl::EventLoop<crate::Event>) -> eyre::Result<Self> {
         static LISTENER: libseat_sys::libseat_seat_listener = libseat_sys::libseat_seat_listener {
             enable_seat: Some(on_enable_seat),
             disable_seat: Some(on_disable_seat),
@@ -33,7 +33,7 @@ impl Seat {
         let handle = match event_loop
             .register_fd(
                 &fd,
-                crate::event_loop::Interest::Readable,
+                evl::Interest::Readable,
                 crate::Event::Session(Event::Dispatch),
             )
             .wrap_err("failed to register libseat fd in event loop")
@@ -161,7 +161,7 @@ unsafe extern "C" fn on_enable_seat(
     _seat: *mut libseat_sys::libseat,
     emitter: *mut std::ffi::c_void,
 ) {
-    let emitter = unsafe { &*(emitter as *const crate::event_loop::Emitter<crate::Event>) };
+    let emitter = unsafe { &*(emitter as *const evl::Emitter<crate::Event>) };
     emitter.emit(crate::Event::Session(Event::Enable));
 }
 
@@ -169,7 +169,7 @@ unsafe extern "C" fn on_disable_seat(
     _seat: *mut libseat_sys::libseat,
     emitter: *mut std::ffi::c_void,
 ) {
-    let emitter = unsafe { &*(emitter as *const crate::event_loop::Emitter<crate::Event>) };
+    let emitter = unsafe { &*(emitter as *const evl::Emitter<crate::Event>) };
     emitter.emit(crate::Event::Session(Event::Disable));
 }
 

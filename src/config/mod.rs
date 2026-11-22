@@ -8,7 +8,7 @@ pub struct Service {}
 impl Service {
     pub fn spawn(
         context: &crate::startup::Context,
-        event_loop: &mut crate::event_loop::EventLoop<crate::Event>,
+        event_loop: &mut evl::EventLoop<crate::Event>,
     ) -> eyre::Result<Handle> {
         let (command_sender, command_receiver) = crossbeam_channel::unbounded::<Command>();
         let path = context.path.config.file.clone();

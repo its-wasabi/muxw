@@ -1,6 +1,6 @@
 use eyre::Context;
 use input::{
-    AsRaw,
+    AsRaw as _,
     event::{
         EventTrait,
         keyboard::KeyboardEventTrait,
@@ -8,7 +8,7 @@ use input::{
     },
 };
 use slotmap::Key;
-use std::os::fd::{AsFd, AsRawFd};
+use std::os::fd::{AsFd as _, AsRawFd as _};
 
 const DEFAULT_DEVICES_CAPACITY: usize = 2;
 
@@ -120,14 +120,14 @@ pub struct InputEvent<'a> {
 }
 
 pub struct Libinput {
-    handle: crate::event_loop::IoHandle<crate::Event>,
+    handle: evl::IoHandle<crate::Event>,
     libinput: input::Libinput,
     devices: slotmap::SlotMap<DeviceKey, input::Device>,
 }
 
 impl Libinput {
     pub fn new(
-        event_loop: &mut crate::event_loop::EventLoop<crate::Event>,
+        event_loop: &mut evl::EventLoop<crate::Event>,
         seat_handle: crate::backend::session::SeatHandle,
     ) -> eyre::Result<Self> {
         let mut libinput = input::Libinput::new_with_udev(LibinputInterface {
@@ -142,7 +142,7 @@ impl Libinput {
         let handle = event_loop
             .register_fd(
                 &libinput.as_fd(),
-                crate::event_loop::Interest::Readable,
+                evl::Interest::Readable,
                 crate::Event::Input(Event::Dispatch),
             )
             .wrap_err("failed to register libinput fd in event loop")?;

@@ -1,3 +1,5 @@
+use eyre::Context;
+
 mod seat;
 
 pub struct Compositor {
@@ -7,7 +9,7 @@ pub struct Compositor {
     config: crate::config::Handle,
     input: crate::backend::input::Libinput,
 
-    event_loop: crate::event_loop::EventLoop<crate::Event>,
+    event_loop: evl::EventLoop<crate::Event>,
     triggered_events: Vec<crate::Event>,
 
     // NOTE: Must be dropped after other components since it handles device close calls
@@ -16,7 +18,7 @@ pub struct Compositor {
 
 impl Compositor {
     pub fn new(context: &crate::startup::Context) -> eyre::Result<Self> {
-        let mut event_loop = crate::event_loop::EventLoop::new()?;
+        let mut event_loop = evl::EventLoop::new()?;
         let triggered_events = Vec::new();
 
         let config = crate::config::Service::spawn(context, &mut event_loop)?;
@@ -94,7 +96,10 @@ impl Compositor {
                                 if pressed {
                                     match keycode {
                                         keycode if keycode == esc => {
-                                            self.event_loop.emitter().emit(crate::Event::Exit)
+                                            self.event_loop
+                                                .emitter()
+                                                .emit(crate::Event::Exit)
+                                                .wrap_err("Something went wrong whoops");
                                         }
 
                                         keycode if (f1..=f12).contains(&keycode) => {

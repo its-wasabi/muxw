@@ -1,7 +1,7 @@
 pub struct ProtocolState {}
 
 impl ProtocolState {
-    pub fn new(_event_loop: &mut crate::event_loop::EventLoop<crate::Event>) -> Self {
+    pub fn new(_event_loop: &mut evl::EventLoop<crate::Event>) -> Self {
         Self {}
     }
 }

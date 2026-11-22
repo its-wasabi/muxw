@@ -9,7 +9,7 @@ const DEVICES_DEFAULT_CAPACITY: usize = 1;
 const OUTPUTS_DEFAULT_CAPACITY: usize = 1;
 
 pub struct Drm {
-    handle: crate::event_loop::IoHandle<crate::Event>,
+    handle: evl::IoHandle<crate::Event>,
     monitor: udev::MonitorSocket,
     seat_handle: crate::backend::session::SeatHandle,
 
@@ -21,7 +21,7 @@ pub struct Drm {
 impl Drm {
     pub fn new(
         seat_handle: crate::backend::session::SeatHandle,
-        event_loop: &mut crate::event_loop::EventLoop<crate::Event>,
+        event_loop: &mut evl::EventLoop<crate::Event>,
     ) -> eyre::Result<Self> {
         let monitor = udev::MonitorBuilder::new()
             .wrap_err("failed to create udev monitor builder")?
@@ -31,7 +31,7 @@ impl Drm {
             .wrap_err("failed to start udev monitor")?;
 
         let handle = event_loop
-            .register_fd(&monitor, crate::event_loop::Interest::Readable, Event::Udev)
+            .register_fd(&monitor, evl::Interest::Readable, Event::Udev)
             .wrap_err("failed to register udev monitor in event loop")?;
 
         let mut enumerator =
@@ -76,7 +76,7 @@ impl Drm {
     pub fn dispatch(
         &mut self,
         event: Event,
-        event_loop: &mut crate::event_loop::EventLoop<crate::Event>,
+        event_loop: &mut evl::EventLoop<crate::Event>,
     ) -> eyre::Result<()> {
         match event {
             Event::Udev => self.handle_udev(self.seat_handle, event_loop),
@@ -87,7 +87,7 @@ impl Drm {
     fn handle_udev(
         &mut self,
         seat_handle: crate::backend::session::SeatHandle,
-        event_loop: &mut crate::event_loop::EventLoop<crate::Event>,
+        event_loop: &mut evl::EventLoop<crate::Event>,
     ) -> eyre::Result<()> {
         while let Some(event) = self.monitor.iter().next() {
             match event.event_type() {
@@ -124,7 +124,7 @@ impl Drm {
         &mut self,
         device: &udev::Device,
         seat_handle: crate::backend::session::SeatHandle,
-        event_loop: &mut crate::event_loop::EventLoop<crate::Event>,
+        event_loop: &mut evl::EventLoop<crate::Event>,
     ) -> eyre::Result<Option<device::DeviceKey>> {
         self.devices
             .try_insert_with_key(|key| {

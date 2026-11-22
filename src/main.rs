@@ -2,8 +2,6 @@ mod backend;
 mod build_info;
 mod compositor;
 mod config;
-mod event;
-mod event_loop;
 mod renderer;
 mod startup;
 mod wayland;

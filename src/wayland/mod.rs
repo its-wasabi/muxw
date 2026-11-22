@@ -5,8 +5,8 @@ mod client;
 mod protocol;
 
 pub struct Wayland {
-    socket_handle: crate::event_loop::IoHandle<crate::Event>,
-    display_handle: crate::event_loop::IoHandle<crate::Event>,
+    socket_handle: evl::IoHandle<crate::Event>,
+    display_handle: evl::IoHandle<crate::Event>,
 
     display: wayland_server::Display<protocol::ProtocolState>,
     socket: wayland_server::ListeningSocket,
@@ -16,7 +16,7 @@ pub struct Wayland {
 impl Wayland {
     pub fn new(
         context: &crate::startup::Context,
-        event_loop: &mut crate::event_loop::EventLoop<crate::Event>,
+        event_loop: &mut evl::EventLoop<crate::Event>,
     ) -> eyre::Result<Self> {
         let mut display =
             wayland_server::Display::new().wrap_err("failed to create Wayland display")?;
@@ -34,17 +34,13 @@ impl Wayland {
         };
 
         let socket_handle = event_loop
-            .register_fd(
-                &socket.as_fd(),
-                crate::event_loop::Interest::Readable,
-                Event::Socket,
-            )
+            .register_fd(&socket.as_fd(), evl::Interest::Readable, Event::Socket)
             .wrap_err("failed to register Wayland socket in event loop")?;
 
         let display_handle = event_loop
             .register_fd(
                 &display.backend().poll_fd().as_fd(),
-                crate::event_loop::Interest::Readable,
+                evl::Interest::Readable,
                 Event::Display,
             )
             .wrap_err("failed to register Wayland display in event loop")?;
@@ -62,7 +58,7 @@ impl Wayland {
     pub fn dispatch(
         &mut self,
         event: Event,
-        event_loop: &crate::event_loop::EventLoop<crate::Event>,
+        event_loop: &evl::EventLoop<crate::Event>,
     ) -> eyre::Result<()> {
         match event {
             Event::Socket => self.accept_clients(event_loop),
@@ -74,10 +70,7 @@ impl Wayland {
         }
     }
 
-    fn accept_clients(
-        &self,
-        event_loop: &crate::event_loop::EventLoop<crate::Event>,
-    ) -> eyre::Result<()> {
+    fn accept_clients(&self, event_loop: &evl::EventLoop<crate::Event>) -> eyre::Result<()> {
         // The socket is registered edge-triggered, so every pending connection
         // has to be drained now: no further wakeup comes for ones left queued.
         while let Some(stream) = self

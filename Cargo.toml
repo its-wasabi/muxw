@@ -15,6 +15,8 @@ backtrace = "0.3.77"
 tracing = { version = "0.1.44", features = ["max_level_trace", "release_max_level_warn"] }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt"] }
 
+evl = "0.1.0"
+
 clap = { version = "4.5.54", features = ["derive"] }
 
 wayland-server = { version = "0.31.10", default-features = false }
@@ -25,12 +27,9 @@ bitflags = "2.11.0"
 rustc-hash = "2.1.2"
 slotmap = "1.1.1"
 multi_index_map = "0.15.1"
-
-polling = "3.11.0"
 crossbeam-channel = "0.5.15"
 
 libseat-sys = "0.2.0"
-
 udev = "0.9.3"
 input = "0.10.0"
 xkbcommon = "0.9.0"
@@ -52,21 +51,3 @@ evdev = "0.13.2"
 [build-dependencies]
 clap_complete = "4.5.65"
 clap = { version = "4.5.54", features = ["derive"] }
-
-[dev-dependencies]
-criterion = "0.5"
-iai-callgrind = "0.14"
-rustix = { version = "1", features = ["event"] }  
-
-[[bench]]
-name = "event_loop"
-harness = false
-
-# [[bench]]
-# name = "instructions"
-# harness = false
-
-[profile.bench]
-lto = "fat"
-codegen-units = 1
-debug = true
